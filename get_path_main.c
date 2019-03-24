@@ -7,7 +7,7 @@ main()
 
   p = get_path();
   while (p) {         // WHERE
-    sprintf(cmd, "%s/gcc", p->element);
+    sprintf(cmd, "%s/skype", p->element);
     if (access(cmd, X_OK) == 0)
       printf("[%s]\n", cmd);
     p = p->next;
@@ -17,7 +17,7 @@ main()
 
   p = get_path();
   while (p) {         // WHICH
-    sprintf(cmd, "%s/gcc", p->element);
+    sprintf(cmd, "%s/which", p->element);
     if (access(cmd, X_OK) == 0) {
       printf("[%s]\n", cmd);
       break;
