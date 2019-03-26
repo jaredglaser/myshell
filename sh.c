@@ -33,12 +33,13 @@ int sh( int argc, char **argv, char **envp )
   if ( (pwd = getcwd(NULL, PATH_MAX+1)) == NULL )
   {
     perror("getcwd");
+    free(pwd);
     exit(2);
   }
   owd = calloc(strlen(pwd) + 1, sizeof(char));
   memcpy(owd, pwd, strlen(pwd));
   prompt[0] = ' '; prompt[1] = '\0';
-
+  free(pwd); //malloc'd by getcwd
   /* Put PATH into a linked list */
   pathlist = get_path();
 
@@ -47,9 +48,16 @@ int sh( int argc, char **argv, char **envp )
     /* print your prompt */
 
     //generate directory
-    char* workingdir;
-    workingdir = getcwd(NULL, 0);
-    printf("[%s]",workingdir);
+    char *workingdir;
+    
+    workingdir =getcwd(NULL, 0);
+    if(strcmp(prompt," ") == 0){ //ignore the prompt if it is the default space
+      printf("[%s]",workingdir);
+    }
+    else{
+    printf("%s [%s]",prompt,workingdir);
+    }
+    free(workingdir);//malloc'd by getcwd
     printf(">>");
     /* get command line and process */
     if (fgets(input, 64 , stdin) != NULL && strcmp(input,"\n") != 0)
@@ -58,7 +66,7 @@ int sh( int argc, char **argv, char **envp )
     input[len - 1] = '\0';
 
     //nullify the arguments before each command
-    for(int i = 0; i < 10; i++){
+    for(int i = 0; i < 64; i++){  //expecting only 64 max args. May see issues if user exceeds this.
       args[i] = NULL;
     }
 
@@ -88,34 +96,75 @@ int sh( int argc, char **argv, char **envp )
        printWorkingDir();
      } 
      else if(strcmp(args[0],"exit")==0){
+       //free fields
+       free(prompt);
+       free(commandline);
+       free(owd);
+       
+
+       while(pathlist->next != NULL){ //free pathlist which was malloc'd by get_path
+         struct pathelement *p = pathlist;
+         pathlist = pathlist->next;
+         if(p->element != NULL)
+          free(p->element);
+         free(p);
+       } 
+       if(pathlist->element != NULL)
+        free(pathlist->element);
+       free(pathlist);
+
+       for(int i=0; i < MAXARGS; i++)
+          free(args[i]);
+        free(args);
        return 0;
      }
      else if(strcmp(args[0],"cd")==0){
        changeDir(args);
      }
      else if(strcmp(args[0],"list")==0){
-       if(args[1] == NULL){
-       list(getcwd(NULL, 0));
-       }
-       else{
-        list(args[1]);
-       }
+       list(args);
      }
      else if(strcmp(args[0],"pid")==0){
        printPid();
      }
+     else if(strcmp(args[0],"prompt")==0){
+       promptCmd(args, prompt);
+     }
 
      else{
-        //char *commandPath = which(args[0],pathlist);
+        
         int PID = fork();
+        int status;
         if(PID == 0){ //child
+
+          
           char *newenviron[] = { (char*)0 };
-          execve("/usr/bin/ls",args,newenviron);
+          
+          //if the arg contains ./ ../ or starts with a /
+          if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/'){ 
+            if (access(args[0], X_OK) == 0) //if the path given is to an executable
+              execve(args[0],args,newenviron);
+            else{
+              printf("Executable not found.\n");
+            }
+          }
+          /*
+          // If the command is in the path
+          */
+          else if(which(args[0],pathlist) != NULL){
+            execve(which(args[0],pathlist),args,newenviron);
+            
+          }
+          /*
+          // If the command is not in the path
+          */
+          else{
+            printf("Command not found\n");
+          }
           
         }
         else{ //parent
-          wait(NULL);
-          printf("child finished");
+          waitpid(-1, &status, 0);
         }
 
         //fprintf(stderr, "%s: Command not found.\n", args[0]);
@@ -184,19 +233,69 @@ void changeDir(char**args ){
        }
 }
 
-void list(char* dir){
+void list(char **args){
   struct dirent *file;
-  DIR* directory = opendir(dir);
-  while((file = readdir(directory)) != NULL){
+  
+  int i = 1;
+  while(1){
+    DIR* directory;
+    char* cwd;
+    if(i == 1 && args[i] == NULL){
+    
+    directory = opendir(cwd = getcwd(NULL, 0));
+    
+    }
+    else if(args[i] != NULL){
+      directory = opendir(args[i]);
+    }
+    else{
+      
+      break;
+    }
+    if(directory != NULL){
+      printf("\n%s:\n",args[i]);
+      while((file = readdir(directory)) != NULL){
         if(*file->d_name != '.'){ //ignore current dir and last dir along with any hidden files
                 printf("%s\n",file->d_name); //print the file/dir name
         }
         
+      }
+      
     }
+    else{ //error when opening the dir earlier
+      
+      printf("error opening %s", args[i]);
+    }
+
+    if(args[i] == NULL) //we malloced cwd
+      free(cwd);
+    closedir(directory);
+    i++;
+}
 }
 
 void printPid(){
   printf("%d\n",getpid());
+}
+
+void promptCmd(char** args, char* prompt){
+  if(args[1] != NULL){
+    //prompt is given
+    strcpy(prompt,args[1]);
+  }
+  else{
+    char input[64];
+    printf("input prompt prefix:");
+    while(1){
+    if (fgets(input, 64 , stdin) != NULL && strcmp(input,"\n") != 0)
+    {
+      int len = strlen(input);
+      input[len - 1] = '\0';
+      strcpy(prompt,input);
+      break;
+    }
+    }
+}
 }
 
 
