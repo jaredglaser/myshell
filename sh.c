@@ -11,6 +11,7 @@
 #include <signal.h>
 #include "sh.h"
 #include <errno.h>
+#include <glob.h>
 
 
 int sh( int argc, char **argv, char **envp )
@@ -18,7 +19,6 @@ int sh( int argc, char **argv, char **envp )
   char *prompt = calloc(PROMPTMAX, sizeof(char));
   char *commandline = calloc(MAX_CANON, sizeof(char));
   char *command, *arg, *commandpath, *p, *pwd, *owd;
-  char **args = calloc(MAXARGS, sizeof(char*));
   int uid, i, status, argsct, go = 1;
   struct passwd *password_entry;
   char *homedir;
@@ -49,6 +49,8 @@ int sh( int argc, char **argv, char **envp )
 
     //generate directory
     char *workingdir;
+    //calloc the args array
+    char **args = calloc(MAXARGS, sizeof(char*));
     
     workingdir =getcwd(NULL, 0);
     if(strcmp(prompt," ") == 0){ //ignore the prompt if it is the default space
@@ -65,10 +67,8 @@ int sh( int argc, char **argv, char **envp )
     int len = strlen(input);
     input[len - 1] = '\0';
 
-    //nullify the arguments before each command
-    for(int i = 0; i < 64; i++){  //expecting only 64 max args. May see issues if user exceeds this.
-      args[i] = NULL;
-    }
+    char *copy = (char*)malloc((strlen(input)+1)*sizeof(char));
+    strcpy(copy,input);
 
     //use strtok to generate the tokens
    
@@ -79,10 +79,23 @@ int sh( int argc, char **argv, char **envp )
       argument = strtok(NULL, " ");  
       i++;
     }// now args is full of our arguments
-
+    
 
     /* check for each built in command and implement */
+      if((strcmp(args[0],"where")==0)|| //internal command
+      (strcmp(args[0],"which")==0)||
+      (strcmp(args[0],"pwd")==0)||
+      (strcmp(args[0],"exit")==0)||
+      (strcmp(args[0],"cd")==0)||
+      (strcmp(args[0],"list")==0)||
+      (strcmp(args[0],"pid")==0)||
+      (strcmp(args[0],"prompt")==0) ||
+      (strcmp(args[0],"kill")==0)){
+        printf("Executing built-in [%s]\n",args[0]);
+      }
+      
 
+     
      /*  else  program to exec */
      if(strcmp(args[0],"where")==0){
        where(args[1],pathlist); 
@@ -97,25 +110,20 @@ int sh( int argc, char **argv, char **envp )
      } 
      else if(strcmp(args[0],"exit")==0){
        //free fields
+       free(copy);
        free(prompt);
        free(commandline);
        free(owd);
        
+      while(pathlist->next != NULL) {
+        struct pathelement* next = pathlist->next;
+        free(pathlist);
+        pathlist = next;
+      }
+      free(pathlist);
 
-       while(pathlist->next != NULL){ //free pathlist which was malloc'd by get_path
-         struct pathelement *p = pathlist;
-         pathlist = pathlist->next;
-         if(p->element != NULL)
-          free(p->element);
-         free(p);
-       } 
-       if(pathlist->element != NULL)
-        free(pathlist->element);
-       free(pathlist);
-
-       for(int i=0; i < MAXARGS; i++)
-          free(args[i]);
-        free(args);
+      free(args);
+      
        return 0;
      }
      else if(strcmp(args[0],"cd")==0){
@@ -130,20 +138,74 @@ int sh( int argc, char **argv, char **envp )
      else if(strcmp(args[0],"prompt")==0){
        promptCmd(args, prompt);
      }
+     else if(strcmp(args[0], "kill")==0){
+       killProc(args);
+     }
 
      else{
         
         int PID = fork();
         int status;
+        char * res;
         if(PID == 0){ //child
+          int isWild = 0;
+          glob_t globbuf;
+          int gl_offs_count = 0;
+          if(strstr(copy,"*") || strstr(copy,"?")){
+            //there are wildcards
+            isWild = 1;
+            //find any flags
+            int flag = 1;
+            for(int i = 1; i<MAXARGS; i++){
+              if(args[i] == NULL)
+                break;
+              if((strstr(args[i],"-"))){ //a wildcard
+                flag++;
+              }
+            }
+            globbuf.gl_offs = flag;
 
-          
-          char *newenviron[] = { (char*)0 };
+            for(int i = 1; i<MAXARGS; i++){
+              if(args[i] == NULL)
+                break;
+              if((strstr(args[i],"*")) || (strstr(args[i],"?"))){ //a wildcard
+                gl_offs_count++; //add up all the numbers of wildcards
+              }
+            }
+            //go through again but this time globbing 
+            int first = 0;
+            for(int i = 1; i<MAXARGS; i++){
+              if(args[i] == NULL)
+                break;
+              if((strstr(args[i],"*")) || (strstr(args[i],"?"))){ //a wildcard
+                if(first)
+                glob(args[i], GLOB_DOOFFS | GLOB_APPEND, NULL, &globbuf);
+                else
+                glob(args[i], GLOB_DOOFFS, NULL, &globbuf);
+              }
+            }
+            globbuf.gl_pathv[0] = args[0]; //set pathv[0] to the command name
+            
+            //set the rest
+            
+            for(int i = 1; i<MAXARGS; i++){
+              if(args[i] == NULL)
+                break;
+              if((strstr(args[i],"-"))){ //a wildcard
+                globbuf.gl_pathv[i] = args[i];
+              }
+            }
+
+
+          } 
+         
           
           //if the arg contains ./ ../ or starts with a /
           if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/'){ 
-            if (access(args[0], X_OK) == 0) //if the path given is to an executable
-              execve(args[0],args,newenviron);
+            if (access(args[0], X_OK) == 0){ //if the path given is to an executable
+              printf("Executing [%s]\n",args[0]);
+              execve(args[0],args,envp);
+            }
             else{
               printf("Executable not found.\n");
             }
@@ -151,8 +213,16 @@ int sh( int argc, char **argv, char **envp )
           /*
           // If the command is in the path
           */
-          else if(which(args[0],pathlist) != NULL){
-            execve(which(args[0],pathlist),args,newenviron);
+          else if(res = whichRet(args[0],pathlist)){
+            printf("Executing [%s]\n",args[0]);
+
+            if(isWild){
+            
+              execvp(args[0], &globbuf.gl_pathv[0]);
+            }
+            else
+            execve(res,args,envp);
+            free(res);
             
           }
           /*
@@ -169,6 +239,7 @@ int sh( int argc, char **argv, char **envp )
 
         //fprintf(stderr, "%s: Command not found.\n", args[0]);
     }
+    free(copy);
   }
   else if(input != NULL && strcmp(input,"\n") == 0){
     //do nothing, the user just hit a newline
@@ -176,12 +247,16 @@ int sh( int argc, char **argv, char **envp )
   else{
     printf("Error collecting input\n");
   }
+
+      
+      free(args);
   }
+
   return 0;
 } /* sh() */
 
 
-char *which(char *command, struct pathelement *p) //NOTE: SEG FAULTING HERE FOR SOME REASON
+void *which(char *command, struct pathelement *p)
 {
   char cmd[64];
   while (p) {         // WHERE
@@ -190,6 +265,23 @@ char *which(char *command, struct pathelement *p) //NOTE: SEG FAULTING HERE FOR 
       printf("%s\n", cmd);
     p = p->next;
   }
+} /* which() */
+
+char* whichRet(char *command, struct pathelement *p)
+{
+  char cmd[256];
+  while (p) {         // WHERE
+    sprintf(cmd, "%s/%s", p->element, command);
+    if (access(cmd, X_OK) == 0){
+      char *ret = (char*)malloc((strlen(cmd)+1)*sizeof(char));
+      strcpy(ret,cmd);
+      return ret;
+    }
+     
+    p = p->next;
+  }
+  return NULL;
+
 } /* which() */
 
 char *where(char *command, struct pathelement *p )
@@ -235,7 +327,6 @@ void changeDir(char**args ){
 
 void list(char **args){
   struct dirent *file;
-  
   int i = 1;
   while(1){
     DIR* directory;
@@ -276,6 +367,28 @@ void list(char **args){
 
 void printPid(){
   printf("%d\n",getpid());
+}
+
+void killProc(char** args){
+  if(args[1] && args[2]){ //we have a flag
+    if(strstr(args[1],"-")){ //if 1 is the one with the flag
+      
+      if(kill(atoi(args[2]),atoi(args[1]+1))==-1){
+        perror("Kill error");
+      }
+    }
+    else{// 2 is the flag
+      if(kill(atoi(args[1]),atoi(args[2]+1))==-1){
+        perror("Kill error");
+      }
+    }
+  }
+  else{ //no sig given
+    if(kill(atoi(args[1]),SIGTERM)==-1){
+      perror("Kill error");
+    }
+
+  }
 }
 
 void promptCmd(char** args, char* prompt){
