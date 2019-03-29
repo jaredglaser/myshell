@@ -23,7 +23,7 @@ int sh( int argc, char **argv, char **envp )
   struct passwd *password_entry;
   char *homedir;
   struct pathelement *pathlist;
-  char input[64];
+  char input [64];
 
   uid = getuid();
   password_entry = getpwuid(uid);               /* get passwd info */
@@ -46,7 +46,7 @@ int sh( int argc, char **argv, char **envp )
   while ( go )
   {
     /* print your prompt */
-
+    
     //generate directory
     char *workingdir;
     //calloc the args array
@@ -62,8 +62,9 @@ int sh( int argc, char **argv, char **envp )
     free(workingdir);//malloc'd by getcwd
     printf(">>");
     /* get command line and process */
-    if (fgets(input, 64 , stdin) != NULL && strcmp(input,"\n") != 0)
+    if (fgets(input, 64 , stdin) != NULL)
   {
+    if(strcmp(input,"\n") != 0){
     int len = strlen(input);
     input[len - 1] = '\0';
 
@@ -90,7 +91,9 @@ int sh( int argc, char **argv, char **envp )
       (strcmp(args[0],"list")==0)||
       (strcmp(args[0],"pid")==0)||
       (strcmp(args[0],"prompt")==0) ||
-      (strcmp(args[0],"kill")==0)){
+      (strcmp(args[0],"kill")==0) ||
+      (strcmp(args[0],"printenv")==0) ||
+      (strcmp(args[0],"setenv")==0) ){
         printf("Executing built-in [%s]\n",args[0]);
       }
       
@@ -98,14 +101,36 @@ int sh( int argc, char **argv, char **envp )
      
      /*  else  program to exec */
      if(strcmp(args[0],"where")==0){
-       where(args[1],pathlist); 
+       if(args[1] != NULL)
+       for(int i = 0; i<MAXARGS; i ++){
+         if(args[i] != NULL)
+          where(args[i],pathlist);
+        else
+          break; 
+       }
+       else
+       printf("Where: not enough arguments\n");
      }
      else if(strcmp(args[0],"which")==0){
-       which(args[1],pathlist); 
+       if(args[1] != NULL){
+       for(int i = 1; i<MAXARGS; i ++){
+         if(args[i] != NULL)
+          which(args[i],pathlist); 
+        else
+          break; 
+       }
+       }
+       else{
+         printf("Which: not enough arguments\n");
+       }
+       
      }
        /* find it */
        /* do fork(), execve() and waitpid() */
      else if(strcmp(args[0],"pwd")==0){
+       if(args[1] != NULL)
+       printf("pwd: too many arguments \n");
+       else
        printWorkingDir();
      } 
      else if(strcmp(args[0],"exit")==0){
@@ -127,19 +152,41 @@ int sh( int argc, char **argv, char **envp )
        return 0;
      }
      else if(strcmp(args[0],"cd")==0){
+       if(args[2] != NULL)
+        printf("cd: too many arguments\n");
+      else{
        changeDir(args);
+      }
+
      }
      else if(strcmp(args[0],"list")==0){
        list(args);
      }
      else if(strcmp(args[0],"pid")==0){
+       if(args[1] != NULL)
+       printf("pid: too many arguments\n");
+       else
        printPid();
+       
      }
      else if(strcmp(args[0],"prompt")==0){
        promptCmd(args, prompt);
      }
      else if(strcmp(args[0], "kill")==0){
+       if(args[3]!=NULL)
+       printf("kill: too many arguments\n");
+       else
        killProc(args);
+     }
+      else if(strcmp(args[0], "printenv")==0){
+       printenv(envp,args,0);
+     }
+      else if(strcmp(args[0], "setenv")==0){
+        if(args[3] != NULL){
+          printf("setenv: too many arguments\n");
+        }
+        else
+       setEnviornment(envp,args,pathlist);
      }
 
      else{
@@ -204,7 +251,9 @@ int sh( int argc, char **argv, char **envp )
           if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/'){ 
             if (access(args[0], X_OK) == 0){ //if the path given is to an executable
               printf("Executing [%s]\n",args[0]);
-              execve(args[0],args,envp);
+              if(execve(args[0],args,envp)==-1){
+                perror("exec");
+              }
             }
             else{
               printf("Executable not found.\n");
@@ -218,10 +267,15 @@ int sh( int argc, char **argv, char **envp )
 
             if(isWild){
             
-              execvp(args[0], &globbuf.gl_pathv[0]);
+              if(execvp(args[0], &globbuf.gl_pathv[0])==-1){
+                perror("exec");
+              }
             }
-            else
-            execve(res,args,envp);
+            else{
+            if(execve(res,args,envp)==-1){
+              perror("exec");
+            }
+            }
             free(res);
             
           }
@@ -241,11 +295,15 @@ int sh( int argc, char **argv, char **envp )
     }
     free(copy);
   }
-  else if(input != NULL && strcmp(input,"\n") == 0){
-    //do nothing, the user just hit a newline
+  else{
+    
+    //it was a newline so we do nothing
+  }
   }
   else{
-    printf("Error collecting input\n");
+      printf("\n");
+      clearerr(stdin);
+      //control + D was pressed
   }
 
       
@@ -261,8 +319,10 @@ void *which(char *command, struct pathelement *p)
   char cmd[64];
   while (p) {         // WHERE
     sprintf(cmd, "%s/%s", p->element, command);
-    if (access(cmd, X_OK) == 0)
+    if (access(cmd, X_OK) == 0){
       printf("%s\n", cmd);
+      break;
+    }
     p = p->next;
   }
 } /* which() */
@@ -314,7 +374,7 @@ void changeDir(char**args ){
             printf("Error locating home directory.\n");
          }
        }
-       else if(args[1] == "-"){
+       else if(strcmp(args[1],"-") == 0){
          if(chdir("..") != 0)
             printf("Error changing Directory.\n");
        }
@@ -338,13 +398,16 @@ void list(char **args){
     }
     else if(args[i] != NULL){
       directory = opendir(args[i]);
+   
     }
     else{
       
       break;
     }
     if(directory != NULL){
+      if(args[i] != NULL){ //allow default list behavior
       printf("\n%s:\n",args[i]);
+      }
       while((file = readdir(directory)) != NULL){
         if(*file->d_name != '.'){ //ignore current dir and last dir along with any hidden files
                 printf("%s\n",file->d_name); //print the file/dir name
@@ -355,12 +418,14 @@ void list(char **args){
     }
     else{ //error when opening the dir earlier
       
-      printf("error opening %s", args[i]);
+      printf("error opening %s\n", args[i]);
     }
 
     if(args[i] == NULL) //we malloced cwd
       free(cwd);
-    closedir(directory);
+    if(closedir(directory) == -1){
+      perror("closedir");
+    }
     i++;
 }
 }
@@ -370,7 +435,7 @@ void printPid(){
 }
 
 void killProc(char** args){
-  if(args[1] && args[2]){ //we have a flag
+  if(args[1]!= NULL && args[2]!= NULL){ //we have a flag
     if(strstr(args[1],"-")){ //if 1 is the one with the flag
       
       if(kill(atoi(args[2]),atoi(args[1]+1))==-1){
@@ -383,11 +448,14 @@ void killProc(char** args){
       }
     }
   }
-  else{ //no sig given
+  else if(args[1] != NULL){ //no sig given
     if(kill(atoi(args[1]),SIGTERM)==-1){
       perror("Kill error");
     }
 
+  }
+  else{
+    printf("kill: not enough arguments.\n");
   }
 }
 
@@ -409,6 +477,54 @@ void promptCmd(char** args, char* prompt){
     }
     }
 }
+}
+
+void printenv(char **envp, char **args,int forcePrintAll){
+  if(args[1] != NULL && forcePrintAll == 0){
+    char* res = getenv(args[1]);
+    if(res != NULL)
+    printf("%s\n",res);
+    else
+    printf("Does not exist.\n");
+    
+  }
+  else{
+  while (*envp){
+    printf("%s\n", *envp++);
+  }
+  }
+}
+
+void setEnviornment(char **envp, char**args,struct pathelement *pathlist){
+  if(args[1] == NULL){ //given no args
+    printenv(envp,args,1);
+  }
+  else if(args[1] != NULL && args[2] == NULL){
+    
+    if(setenv(args[1],"",1)==-1){
+      perror("Set Enviornment error");
+      return;
+    }
+    if(strcmp(args[1],"HOME")==0){
+      while(pathlist->next != NULL) {
+        struct pathelement* next = pathlist->next;
+        free(pathlist);
+        pathlist = next;
+      }
+      free(pathlist);
+
+      pathlist = get_path();
+    }
+  }
+  else if(args[1] != NULL && args[2] != NULL){
+    if(setenv(args[1],args[2],1)==-1){
+      perror("Set Enviornment error");
+      return;
+    }
+  }
+  else{
+    printf("setenv: Too many arguments.\n");
+  }
 }
 
 
