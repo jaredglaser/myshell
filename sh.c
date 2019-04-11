@@ -190,111 +190,8 @@ int sh( int argc, char **argv, char **envp )
      }
 
      else{
-        
-        int PID = fork();
-        int status;
-        char * res;
-        if(PID == 0){ //child
-          int isWild = 0;
-          glob_t globbuf;
-          int gl_offs_count = 0;
-          if(strstr(copy,"*") || strstr(copy,"?")){
-            //there are wildcards
-            isWild = 1;
-            //find any flags
-            int flag = 1;
-            for(int i = 1; i<MAXARGS; i++){
-              if(args[i] == NULL)
-                break;
-              if((strstr(args[i],"-"))){ //a wildcard
-                flag++;
-              }
-            }
-            globbuf.gl_offs = flag;
+       forkit(args, envp,pathlist,copy,numArgs);
 
-            for(int i = 1; i<MAXARGS; i++){
-              if(args[i] == NULL)
-                break;
-              if((strstr(args[i],"*")) || (strstr(args[i],"?"))){ //a wildcard
-                gl_offs_count++; //add up all the numbers of wildcards
-              }
-            }
-            //go through again but this time globbing 
-            int first = 0;
-            for(int i = 1; i<MAXARGS; i++){
-              if(args[i] == NULL)
-                break;
-              if((strstr(args[i],"*")) || (strstr(args[i],"?"))){ //a wildcard
-                if(first)
-                glob(args[i], GLOB_DOOFFS | GLOB_APPEND, NULL, &globbuf);
-                else
-                glob(args[i], GLOB_DOOFFS, NULL, &globbuf);
-              }
-            }
-            globbuf.gl_pathv[0] = args[0]; //set pathv[0] to the command name
-            
-            //set the rest
-            
-            for(int i = 1; i<MAXARGS; i++){
-              if(args[i] == NULL)
-                break;
-              if((strstr(args[i],"-"))){ //a wildcard
-                globbuf.gl_pathv[i] = args[i];
-              }
-            }
-
-
-          } 
-         
-          
-          //if the arg contains ./ ../ or starts with a /
-          if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/'){ 
-            if (access(args[0], X_OK) == 0){ //if the path given is to an executable
-              printf("Executing [%s]\n",args[0]);
-              if(execve(args[0],args,envp)==-1){
-                perror("exec");
-              }
-            }
-            else{
-              printf("Executable not found.\n");
-            }
-          }
-          /*
-          // If the command is in the path
-          */
-          else if(res = whichRet(args[0],pathlist)){
-            printf("Executing [%s]\n",args[0]);
-
-            if(isWild){
-            
-              if(execvp(args[0], &globbuf.gl_pathv[0])==-1){
-                perror("exec");
-              }
-            }
-            else{
-            if(execve(res,args,envp)==-1){
-              perror("exec");
-            }
-            }
-            free(res);
-            
-          }
-          /*
-          // If the command is not in the path
-          */
-          else{
-            printf("Command not found\n");
-          }
-          
-        }
-        else{ //parent
-          if(strcmp(args[numArgs-1],"&")==0)
-          waitpid(-1, &status, WNOHANG);
-          else
-          waitpid(-1, &status, 0);
-        }
-
-        //fprintf(stderr, "%s: Command not found.\n", args[0]);
     }
     free(copy);
   }
@@ -528,6 +425,114 @@ void setEnviornment(char **envp, char**args,struct pathelement *pathlist){
   else{
     printf("setenv: Too many arguments.\n");
   }
+}
+
+void forkit(char**args, char **envp,struct pathelement *pathlist,char*copy, int numArgs){
+          
+        int PID = fork();
+        int status;
+        char * res;
+        if(PID == 0){ //child
+          int isWild = 0;
+          glob_t globbuf;
+          int gl_offs_count = 0;
+          if(strstr(copy,"*") || strstr(copy,"?")){
+            //there are wildcards
+            isWild = 1;
+            //find any flags
+            int flag = 1;
+            for(int i = 1; i<MAXARGS; i++){
+              if(args[i] == NULL)
+                break;
+              if((strstr(args[i],"-"))){ //a wildcard
+                flag++;
+              }
+            }
+            globbuf.gl_offs = flag;
+
+            for(int i = 1; i<MAXARGS; i++){
+              if(args[i] == NULL)
+                break;
+              if((strstr(args[i],"*")) || (strstr(args[i],"?"))){ //a wildcard
+                gl_offs_count++; //add up all the numbers of wildcards
+              }
+            }
+            //go through again but this time globbing 
+            int first = 0;
+            for(int i = 1; i<MAXARGS; i++){
+              if(args[i] == NULL)
+                break;
+              if((strstr(args[i],"*")) || (strstr(args[i],"?"))){ //a wildcard
+                if(first)
+                glob(args[i], GLOB_DOOFFS | GLOB_APPEND, NULL, &globbuf);
+                else
+                glob(args[i], GLOB_DOOFFS, NULL, &globbuf);
+              }
+            }
+            globbuf.gl_pathv[0] = args[0]; //set pathv[0] to the command name
+            
+            //set the rest
+            
+            for(int i = 1; i<MAXARGS; i++){
+              if(args[i] == NULL)
+                break;
+              if((strstr(args[i],"-"))){ //a wildcard
+                globbuf.gl_pathv[i] = args[i];
+              }
+            }
+
+
+          } 
+         
+          
+          //if the arg contains ./ ../ or starts with a /
+          if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/'){ 
+            if (access(args[0], X_OK) == 0){ //if the path given is to an executable
+              printf("Executing [%s]\n",args[0]);
+              if(execve(args[0],args,envp)==-1){
+                perror("exec");
+              }
+            }
+            else{
+              printf("Executable not found.\n");
+            }
+          }
+          /*
+          // If the command is in the path
+          */
+          else if(res = whichRet(args[0],pathlist)){
+            printf("Executing [%s]\n",args[0]);
+
+            if(isWild){
+            
+              if(execvp(args[0], &globbuf.gl_pathv[0])==-1){
+                perror("exec");
+              }
+            }
+            else{
+            if(execve(res,args,envp)==-1){
+              perror("exec");
+            }
+            }
+            free(res);
+            
+          }
+          /*
+          // If the command is not in the path
+          */
+          else{
+            printf("Command not found\n");
+          }
+          
+        }
+        else{ //parent
+          if(strcmp(args[numArgs-1],"&")==0)
+          waitpid(-1, &status, WNOHANG);
+          else
+          waitpid(-1, &status, 0);
+        }
+
+        //fprintf(stderr, "%s: Command not found.\n", args[0]);
 }
 
 

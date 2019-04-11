@@ -15,6 +15,7 @@ void nullify(char **args);
 void printPid();
 void promptCmd(char **args, char* prompt);
 void killProc(char **args);
+void forkit(char**args, char **envp,struct pathelement *pathlist,char*copy,int numArgs);
 
 
 #define PROMPTMAX 32
