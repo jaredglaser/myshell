@@ -19,7 +19,7 @@ int sh( int argc, char **argv, char **envp )
   char *prompt = calloc(PROMPTMAX, sizeof(char));
   char *commandline = calloc(MAX_CANON, sizeof(char));
   char *command, *arg, *commandpath, *p, *pwd, *owd;
-  int uid, i, status, argsct, go = 1;
+  int uid, numArgs, status, argsct, go = 1;
   struct passwd *password_entry;
   char *homedir;
   struct pathelement *pathlist;
@@ -74,11 +74,11 @@ int sh( int argc, char **argv, char **envp )
     //use strtok to generate the tokens
    
     char *argument = strtok(input, " "); //first should be the command, next are the args
-    int i = 0;
+    int numArgs = 0;
     while(argument != NULL){ //fill up arguments with args
-      args[i] = argument;
+      args[numArgs] = argument;
       argument = strtok(NULL, " ");  
-      i++;
+      numArgs++;
     }// now args is full of our arguments
     
 
@@ -288,6 +288,9 @@ int sh( int argc, char **argv, char **envp )
           
         }
         else{ //parent
+          if(strcmp(args[numArgs-1],"&")==0)
+          waitpid(-1, &status, WNOHANG);
+          else
           waitpid(-1, &status, 0);
         }
 
