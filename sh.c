@@ -12,7 +12,9 @@
 #include "sh.h"
 #include <errno.h>
 #include <glob.h>
-
+#include <pthread.h>
+#include <sys/stat.h>
+#include <sys/time.h>
 
 int sh( int argc, char **argv, char **envp )
 {
@@ -62,8 +64,7 @@ int sh( int argc, char **argv, char **envp )
     free(workingdir);//malloc'd by getcwd
     printf(">>");
     /* get command line and process */
-    if (fgets(input, 64 , stdin) != NULL)
-  {
+    if (fgets(input, 64 , stdin) != NULL){
     if(strcmp(input,"\n") != 0){
     int len = strlen(input);
     input[len - 1] = '\0';
@@ -85,6 +86,7 @@ int sh( int argc, char **argv, char **envp )
     /* check for each built in command and implement */
       if((strcmp(args[0],"where")==0)|| //internal command
       (strcmp(args[0],"which")==0)||
+      (strcmp(args[0],"watchmail")==0)||
       (strcmp(args[0],"pwd")==0)||
       (strcmp(args[0],"exit")==0)||
       (strcmp(args[0],"cd")==0)||
@@ -151,23 +153,25 @@ int sh( int argc, char **argv, char **envp )
       
        return 0;
      }
-     else if(strcmp(args[0],"cd")==0){
-       if(args[2] != NULL)
+    else if(strcmp(args[0],"cd")==0){
+      if(args[2] != NULL){
         printf("cd: too many arguments\n");
+      }
       else{
        changeDir(args);
       }
-
-     }
+    }
      else if(strcmp(args[0],"list")==0){
        list(args);
+     }
+     else if(strcmp(args[0],"watchmail")==0){
+        watchmail(args);
      }
      else if(strcmp(args[0],"pid")==0){
        if(args[1] != NULL)
        printf("pid: too many arguments\n");
        else
        printPid();
-       
      }
      else if(strcmp(args[0],"prompt")==0){
        promptCmd(args, prompt);
@@ -188,9 +192,7 @@ int sh( int argc, char **argv, char **envp )
         else
        setEnviornment(envp,args,pathlist);
      }
-
      else{
-        
         int PID = fork();
         int status;
         char * res;
@@ -242,11 +244,7 @@ int sh( int argc, char **argv, char **envp )
                 globbuf.gl_pathv[i] = args[i];
               }
             }
-
-
           } 
-         
-          
           //if the arg contains ./ ../ or starts with a /
           if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/'){ 
             if (access(args[0], X_OK) == 0){ //if the path given is to an executable
@@ -272,31 +270,27 @@ int sh( int argc, char **argv, char **envp )
               }
             }
             else{
-            if(execve(res,args,envp)==-1){
-              perror("exec");
-            }
+              if(execve(res,args,envp)==-1){
+                perror("exec");
+              }
             }
             free(res);
-            
           }
           /*
           // If the command is not in the path
           */
           else{
             printf("Command not found\n");
-          }
-          
+          } 
         }
         else{ //parent
           waitpid(-1, &status, 0);
         }
-
         //fprintf(stderr, "%s: Command not found.\n", args[0]);
     }
     free(copy);
   }
   else{
-    
     //it was a newline so we do nothing
   }
   }
@@ -305,8 +299,6 @@ int sh( int argc, char **argv, char **envp )
       clearerr(stdin);
       //control + D was pressed
   }
-
-      
       free(args);
   }
 
@@ -527,5 +519,40 @@ void setEnviornment(char **envp, char**args,struct pathelement *pathlist){
   }
 }
 
+void watchmail(char **args){
+  pthread_t thread;
+  if(args[2] != NULL){ //it can take an optional second argument of "off" to turn off of watching of mails for that file.
 
+  }
+  else{ //actually watch the file with pthread_create(3)
+    if(pthread_create(&thread, NULL, watchmailthread, args)) {
+      fprintf(stderr, "Error creating thread\n");
+    }
+  }
+}
+void watchmailthread(char **args){
+  struct stat sb;
+  struct stat sb1;
+  if(stat(args[1], &sb)){
+    printf("Error getting file information\n");
+  }
+  int size = sb.st_size;
+  while(1){ //A sleep for 1 second should be in the loop
+    sleep(1);
+    if(!stat(args[1], &sb1)){
+      if(sb1.st_size != size){
+        struct timeval tv;
+        time_t timenow;
+        struct tm *nowtm;
+        char tmbuf[64], buf[64];
+        gettimeofday(&tv, NULL);
+        timenow = tv.tv_sec;
+        nowtm = localtime(&timenow);
+        strftime(tmbuf, sizeof(tmbuf), "%Y-%m-%d %H:%M:%S", nowtm);
+        printf("\nBEEP You've Got Mail in %s at %s \n", args[1], tmbuf);
+        size = sb1.st_size;
+      }
+    }
+  }
+}
 

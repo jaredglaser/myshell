@@ -15,7 +15,8 @@ void nullify(char **args);
 void printPid();
 void promptCmd(char **args, char* prompt);
 void killProc(char **args);
-
+void watchmailthread(char **args);
+void watchmail(char **args);
 
 #define PROMPTMAX 32
 #define MAXARGS 10
