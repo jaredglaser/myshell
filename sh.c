@@ -16,6 +16,8 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
+node *head = NULL;
+
 int sh( int argc, char **argv, char **envp )
 {
   char *prompt = calloc(PROMPTMAX, sizeof(char));
@@ -48,12 +50,10 @@ int sh( int argc, char **argv, char **envp )
   while ( go )
   {
     /* print your prompt */
-    
     //generate directory
     char *workingdir;
     //calloc the args array
     char **args = calloc(MAXARGS, sizeof(char*));
-    
     workingdir =getcwd(NULL, 0);
     if(strcmp(prompt," ") == 0){ //ignore the prompt if it is the default space
       printf("[%s]",workingdir);
@@ -68,12 +68,9 @@ int sh( int argc, char **argv, char **envp )
     if(strcmp(input,"\n") != 0){
     int len = strlen(input);
     input[len - 1] = '\0';
-
     char *copy = (char*)malloc((strlen(input)+1)*sizeof(char));
     strcpy(copy,input);
-
     //use strtok to generate the tokens
-   
     char *argument = strtok(input, " "); //first should be the command, next are the args
     int i = 0;
     while(argument != NULL){ //fill up arguments with args
@@ -81,12 +78,12 @@ int sh( int argc, char **argv, char **envp )
       argument = strtok(NULL, " ");  
       i++;
     }// now args is full of our arguments
-    
 
     /* check for each built in command and implement */
       if((strcmp(args[0],"where")==0)|| //internal command
       (strcmp(args[0],"which")==0)||
       (strcmp(args[0],"watchmail")==0)||
+      (strcmp(args[0],"watchuser")==0)||
       (strcmp(args[0],"pwd")==0)||
       (strcmp(args[0],"exit")==0)||
       (strcmp(args[0],"cd")==0)||
@@ -98,9 +95,6 @@ int sh( int argc, char **argv, char **envp )
       (strcmp(args[0],"setenv")==0) ){
         printf("Executing built-in [%s]\n",args[0]);
       }
-      
-
-     
      /*  else  program to exec */
      if(strcmp(args[0],"where")==0){
        if(args[1] != NULL)
@@ -125,7 +119,6 @@ int sh( int argc, char **argv, char **envp )
        else{
          printf("Which: not enough arguments\n");
        }
-       
      }
        /* find it */
        /* do fork(), execve() and waitpid() */
@@ -519,15 +512,49 @@ void setEnviornment(char **envp, char**args,struct pathelement *pathlist){
   }
 }
 
+void addnode(pthread_t thread, char *data) {
+    node *tmp = malloc(sizeof(node));
+    tmp->thread = thread;
+    tmp->data = data;
+    node *headref = head;
+    tmp->next = NULL;
+    if(!head){
+      head = tmp;
+      return;
+    }
+    while(headref->next != NULL){
+      headref = headref->next;
+    }
+    headref->next = tmp;
+}
 void watchmail(char **args){
   pthread_t thread;
-  if(args[2] != NULL){ //it can take an optional second argument of "off" to turn off of watching of mails for that file.
-
-  }
-  else{ //actually watch the file with pthread_create(3)
-    if(pthread_create(&thread, NULL, watchmailthread, args)) {
+  if(args[2]!= NULL){if(!strcmp(args[2], "off")){ //it can take an optional second argument of "off" to turn off of watching of mails for that file.
+    node *tmp = head;
+    node *prev;
+    if(tmp != NULL && !strcmp(tmp->data, args[1])){
+      pthread_cancel(tmp->thread);
+      head = tmp->next;
+      free(tmp);
+      return;
+    }
+    while(tmp->next != NULL){
+      if(!strcmp(tmp->data, args[1])){ //kill the thread
+        printf("Cancelling thread %d\n", tmp->thread); //delete node...
+        pthread_cancel(tmp->thread);
+        //Cannot free since it might break the list. Free all on exit.
+      }
+      prev = tmp;
+      tmp = tmp->next;
+    }
+    prev->next = tmp->next;
+  }}
+  else{ //actually watch the file with pthread_create(3) 
+    if(pthread_create(&thread, NULL, watchmailthread, args)) { //on success, returns 0
       fprintf(stderr, "Error creating thread\n");
     }
+    printf("THE THREAD IS: %d\n", thread);
+    addnode(thread, args[1]); //append the thread ID to the linked list.
   }
 }
 void watchmailthread(char **args){
@@ -549,7 +576,7 @@ void watchmailthread(char **args){
         timenow = tv.tv_sec;
         nowtm = localtime(&timenow);
         strftime(tmbuf, sizeof(tmbuf), "%Y-%m-%d %H:%M:%S", nowtm);
-        printf("\nBEEP You've Got Mail in %s at %s \n", args[1], tmbuf);
+        printf("\a\n BEEP You've Got Mail in %s at %s \n", args[1], tmbuf);
         size = sb1.st_size;
       }
     }

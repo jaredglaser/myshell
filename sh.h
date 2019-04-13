@@ -1,6 +1,13 @@
 
 #include "get_path.h"
 
+typedef struct node
+{ 
+    pthread_t thread;
+    char *data; 
+    struct node *next; 
+}node;
+node *head; //global head of LL, probably not the best place for it.
 int pid;
 int sh( int argc, char **argv, char **envp);
 void *which(char *command, struct pathelement *pathlist);
@@ -17,6 +24,7 @@ void promptCmd(char **args, char* prompt);
 void killProc(char **args);
 void watchmailthread(char **args);
 void watchmail(char **args);
+void addnode(pthread_t thread, char *data);
 
 #define PROMPTMAX 32
 #define MAXARGS 10
