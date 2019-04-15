@@ -16,7 +16,8 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
-node *head = NULL;
+node *head = NULL; //for watchmail
+node *headu = NULL; //for watchuser
 
 int sh( int argc, char **argv, char **envp )
 {
