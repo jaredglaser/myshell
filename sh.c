@@ -160,6 +160,9 @@ int sh( int argc, char **argv, char **envp )
      else if(strcmp(args[0],"watchmail")==0){
         watchmail(args);
      }
+     else if(strcmp(args[0],"watchuser")==0){
+        watchuser(args);
+     }
      else if(strcmp(args[0],"pid")==0){
        if(args[1] != NULL)
        printf("pid: too many arguments\n");
@@ -553,7 +556,7 @@ void watchmail(char **args){
     if(pthread_create(&thread, NULL, watchmailthread, args)) { //on success, returns 0
       fprintf(stderr, "Error creating thread\n");
     }
-    printf("THE THREAD IS: %d\n", thread);
+    //printf("THE THREAD IS: %d\n", thread);
     addnode(thread, args[1]); //append the thread ID to the linked list.
   }
 }
@@ -582,4 +585,16 @@ void watchmailthread(char **args){
     }
   }
 }
-
+void watchuser(char **args){
+//The first time watchuser is ran, a (new) thread should be created/started via pthread_create(3)
+  pthread_t thread;
+  if(args[2]!= NULL){if(!strcmp(args[2], "off")){ //it can take an optional second argument of "off" to turn off of watching of mails for that file.
+    pthread_cancel(thread);
+  }}
+  else{ //actually watch the file with pthread_create(3) 
+    if(pthread_create(&thread, NULL, watchuserthread, args)) { //on success, returns 0
+      fprintf(stderr, "Error creating thread\n");
+    }
+    printf("THE THREAD IS: %d\n", thread);
+  }
+}
