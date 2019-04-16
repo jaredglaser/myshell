@@ -12,6 +12,8 @@
 #include "sh.h"
 #include <errno.h>
 #include <glob.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 
 int sh( int argc, char **argv, char **envp )
@@ -427,12 +429,113 @@ void setEnviornment(char **envp, char**args,struct pathelement *pathlist){
   }
 }
 
-void forkit(char**args, char **envp,struct pathelement *pathlist,char*copy, int numArgs){
-          
+void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, int numArgs){
+        
+        int offset = 0;
+        int operator = 0;
+        int fd;
+        int leftside = 1;
+        if(strcmp(o_args[numArgs-1],"&")==0){
+            operator = -1;
+        }
+        for(int i=0; i<numArgs; i++){ //look for a <
+          if(strcmp(o_args[i],">") ==0){
+            offset = i;
+            operator = 1; 
+          }
+          if(strcmp(o_args[i],">&") ==0){
+            offset = i;
+            operator = 2; 
+          }
+
+        }
+        char** newArgs;
+        
+        if(operator != 0){
+            //apply neccessary commands to get the input and output working
+          if(operator == 1 || operator == 2){ // > or >&
+              numArgs = offset; //offset will be after the args so args will be index 0 - offset-1
+              offset = 0;
+          }
+          if(operator == -1){
+            numArgs = numArgs-1;
+            offset = numArgs;
+            leftside = 0;
+          }
+        }
+        
+        
+        
+        char **args = calloc(numArgs, sizeof(char*));
+        
+        
+        if(leftside){
+          int j = 0;
+        for(int i=offset;i<numArgs+offset;i++){
+          args[j] = o_args[i];
+          j++;
+        }
+        }
+        else{
+          int j = offset-1;
+          for(int i=offset-1;i>=0;i--){
+          args[j] = o_args[i];
+          j--;
+        }
+        }
+
+
+        //TESTING
+        for(int i=0;i<numArgs;i++){
+          printf("[%d] %s\n",i,args[i]);
+        }
+
         int PID = fork();
         int status;
         char * res;
         if(PID == 0){ //child
+        if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/' || whichRet(args[0],pathlist)){
+          int fd;
+          if(operator == 1){
+            //handle case with >
+            if(close(STDOUT_FILENO)==-1){
+              perror("Close Error");
+            }
+            if(fd = open(o_args[numArgs+1],O_CREAT|O_WRONLY|O_TRUNC,S_IRWXU)==-1){
+              perror("Open Error");
+            }
+            else{
+              dup(fd);
+              close(fd);
+            }
+          }
+          else if(operator == 2){
+            if(close(STDOUT_FILENO)==-1){
+              perror("Close Error");
+            }
+            if(fd = open(o_args[numArgs+1],O_CREAT|O_WRONLY|O_TRUNC,S_IRWXU)==-1){
+              perror("Open Error");
+            }
+            else{
+            dup(fd);
+            close(fd);
+            }
+            if(close(STDERR_FILENO)==-1){
+              perror("Close Error");
+            }
+            if(fd = open(o_args[numArgs+1],O_APPEND|O_WRONLY|O_TRUNC,S_IRWXU)==-1){
+              perror("Open Error");
+            }
+            else{
+              dup(fd);
+              close(fd);
+            }
+          }
+          else if(operator ==3){
+
+          }
+        }
+
           int isWild = 0;
           glob_t globbuf;
           int gl_offs_count = 0;
@@ -530,6 +633,13 @@ void forkit(char**args, char **envp,struct pathelement *pathlist,char*copy, int 
           waitpid(-1, &status, WNOHANG);
           else
           waitpid(-1, &status, 0);
+
+          if(operator != 0){
+              fd = open("/dev/tty", O_WRONLY);
+            }
+
+          
+          
         }
 
         //fprintf(stderr, "%s: Command not found.\n", args[0]);
