@@ -18,8 +18,9 @@
 #include <utmpx.h>
 
 node *head = NULL; //for watchmail
-node *headu = NULL; //for watchuser
+nodeu *headu = NULL; //for watchuser
 pthread_mutex_t watchusert = PTHREAD_MUTEX_INITIALIZER;
+pthread_t threadu = 0;
 
 int sh( int argc, char **argv, char **envp )
 {
@@ -556,14 +557,14 @@ void watchmail(char **args){
     prev->next = tmp->next;
   }}
   else{ //actually watch the file with pthread_create(3) 
-    if(pthread_create(&thread, NULL, watchmailthread, args)) { //on success, returns 0
+    if(pthread_create(&thread, NULL, &watchmailthread, args)) { //on success, returns 0
       fprintf(stderr, "Error creating thread\n");
     }
     //printf("THE THREAD IS: %d\n", thread);
     addnode(thread, args[1]); //append the thread ID to the linked list.
   }
 }
-void watchmailthread(char **args){
+void *watchmailthread(char **args){
   struct stat sb;
   struct stat sb1;
   if(stat(args[1], &sb)){
@@ -590,66 +591,57 @@ void watchmailthread(char **args){
 }
 void watchuser(char **args){
 //The first time watchuser is ran, a (new) thread should be created/started via pthread_create(3)
-  pthread_t thread;
+  pthread_mutex_init(&watchusert, NULL);
   pthread_mutex_lock(&watchusert);
-  if(args[2] == NULL){ //then add a node
-    node *tmp = malloc(sizeof(node));
-    tmp->thread = thread; //doesn't matter
-    tmp->data = args[1]; //the user to watch
-    node *headref = headu;
-    tmp->next = NULL;
-    if(!headu){
-      headu = tmp;
-      return;
-    }
-    while(headref->next != NULL){
-      headref = headref->next;
-    }
-    headref->next = tmp;
-  }
-  else if(args[2]!= NULL){if(!strcmp(args[2], "off")){ //it can take an optional second argument of "off" to turn off of watching of mails for that file.
-    node *tmp = headu;
-    node *prev;
-    if(tmp != NULL && !strcmp(tmp->data, args[1])){
-      pthread_cancel(tmp->thread);
-      head = tmp->next;
-      free(tmp);
-      return;
-    }
-    while(tmp->next != NULL){
-      if(!strcmp(tmp->data, args[1])){ //kill the thread
-        printf("Cancelling thread %d\n", tmp->thread); //delete node...
-        pthread_cancel(tmp->thread);
-        //Cannot free since it might break the list. Free all on exit.
+  if(args[2] == NULL){ //INITIALIZE THE LINKED LIST / ADD TO LINKED LIST
+    nodeu *tmp = malloc(sizeof(node));
+    tmp->isLogged = 0;
+    tmp->next= NULL;
+    tmp->data = args[1];
+    if(headu){
+      nodeu *tmp2 = headu;
+      while(tmp2->next){
+        tmp2 = tmp2->next;
       }
-      prev = tmp;
-      tmp = tmp->next;
+      tmp2->next = tmp;
     }
-    prev->next = tmp->next;
-  }}
+    else{
+      headu = tmp;
+    }
+    struct utmpx *up;
+    setutxent();
+    while (up = getutxent()){	/* get an entry */
+      if (up->ut_type == USER_PROCESS && !strcmp(tmp->data, up->ut_user)){	/* only care about users */
+        tmp->isLogged = 1; //This allows for a check later to see current users. Do this for all users.
+        printf("%s has logged on %s from %s\n", up->ut_user, up->ut_line, up ->ut_host);
+      }
+    }
+  }
+  else if(args[2]){ //"off" implementation
+
+  }
   pthread_mutex_unlock(&watchusert);
-  if(!thread){ 
-    if(pthread_create(&thread, NULL, watchuserthread, args)) { //on success, returns 0
+  if(pthread_create(&threadu, NULL, &watchuserthread, args)) { //same as watchmail basically. 
       fprintf(stderr, "Error creating thread\n");
-    }
-    printf("THE THREAD IS: %d\n", thread);
   }
 }
 //The thread should get the list of users from a global linked list which the calling function 
 //(of the main thread) will modify by either inserting new users or turning off existing watched users.
-void watchuserthread(char **args){
+void *watchuserthread(char **args){
   while(1){
-    struct utmpx *up;
-    node *tmp = headu;
+    nodeu *tmp = headu;
     while(tmp){
-      tmp = tmp->next;
-    }
-    setutxent();			/* start at beginning */
-    while (up = getutxent())	/* get an entry */
-    {
-      if ( up->ut_type == USER_PROCESS && !strcmp(tmp->data, up->ut_user)){	/* only care about users */
-        printf("%s has logged on %s from %s\n", up->ut_user, up->ut_line, up ->ut_host);
+      if(!tmp->isLogged){
+        struct utmpx *up;
+        setutxent();
+        while (up = getutxent()){	/* get an entry */
+          if (up->ut_type == USER_PROCESS && !strcmp(tmp->data, up->ut_user)){	/* only care about users */
+            tmp->isLogged = 1; //This allows for a check later to see current users. Do this for all users.
+            printf("%s has logged on %s from %s\n", up->ut_user, up->ut_line, up ->ut_host);
+          }
+        }
       }
+      tmp = tmp->next;
     }
     sleep(20);
   }
