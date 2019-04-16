@@ -438,14 +438,26 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
         if(strcmp(o_args[numArgs-1],"&")==0){
             operator = -1;
         }
-        for(int i=0; i<numArgs; i++){ //look for a <
+        for(int i=0; i<numArgs; i++){ //look for a > or whatev
           if(strcmp(o_args[i],">") ==0){
             offset = i;
             operator = 1; 
           }
+          if(strcmp(o_args[i],">>") ==0){
+            offset = i;
+            operator = 3; 
+          }
           if(strcmp(o_args[i],">&") ==0){
             offset = i;
             operator = 2; 
+          }
+          if(strcmp(o_args[i],">>&") ==0){
+            offset = i;
+            operator = 4; 
+          }
+          if(strcmp(o_args[i],"<") ==0){
+            offset = i; // file < command
+            operator = 5; 
           }
 
         }
@@ -453,11 +465,15 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
         
         if(operator != 0){
             //apply neccessary commands to get the input and output working
-          if(operator == 1 || operator == 2){ // > or >&
+          if(operator == 1 || operator == 2 || operator == 3 || operator ==4){ // > or >&
               numArgs = offset; //offset will be after the args so args will be index 0 - offset-1
               offset = 0;
           }
-          if(operator == -1){
+          else if(operator == 5){
+            numArgs = numArgs - (offset + 1); // file < arg1 arg2 arg3
+            offset = 2;
+          }
+          else if(operator == -1){
             numArgs = numArgs-1;
             offset = numArgs;
             leftside = 0;
@@ -510,6 +526,7 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
             }
           }
           else if(operator == 2){
+            //handle >&
             if(close(STDOUT_FILENO)==-1){
               perror("Close Error");
             }
@@ -532,7 +549,53 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
             }
           }
           else if(operator ==3){
-
+            //handle case with >>
+            if(close(STDOUT_FILENO)==-1){
+              perror("Close Error");
+            }
+            if(fd = open(o_args[numArgs+1],O_CREAT|O_WRONLY|O_APPEND,S_IRWXU)==-1){
+              perror("Open Error");
+            }
+            else{
+              dup(fd);
+              close(fd);
+            }
+          }
+          else if(operator == 4){
+            //handle >>&
+            if(close(STDOUT_FILENO)==-1){
+              perror("Close Error");
+            }
+            if(fd = open(o_args[numArgs+1],O_CREAT|O_WRONLY|O_APPEND,S_IRWXU)==-1){
+              perror("Open Error");
+            }
+            else{
+            dup(fd);
+            close(fd);
+            }
+            if(close(STDERR_FILENO)==-1){
+              perror("Close Error");
+            }
+            if(fd = open(o_args[numArgs+1],O_WRONLY|O_APPEND,S_IRWXU)==-1){
+              perror("Open Error");
+            }
+            else{
+              dup(fd);
+              close(fd);
+            }
+          }
+          else if(operator == 5){
+            //handle case with <
+            if(close(STDOUT_FILENO)==-1){
+              perror("Close Error");
+            }
+            if(fd = open(o_args[0],O_CREAT|O_WRONLY|O_TRUNC,S_IRWXU)==-1){
+              perror("Open Error");
+            }
+            else{
+              dup(fd);
+              close(fd);
+            }
           }
         }
 
