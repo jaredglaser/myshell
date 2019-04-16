@@ -14,14 +14,21 @@
 #include <glob.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <pthread.h>
+#include <sys/time.h>
+#include <utmpx.h>
 
+node *head = NULL; //for watchmail
+nodeu *headu = NULL; //for watchuser
+pthread_mutex_t watchusert = PTHREAD_MUTEX_INITIALIZER;
+pthread_t threadu = 0;
 
 int sh( int argc, char **argv, char **envp )
 {
   char *prompt = calloc(PROMPTMAX, sizeof(char));
   char *commandline = calloc(MAX_CANON, sizeof(char));
   char *command, *arg, *commandpath, *p, *pwd, *owd;
-  int uid, numArgs, status, argsct, go = 1;
+  int uid, i, status, argsct, go = 1;
   struct passwd *password_entry;
   char *homedir;
   struct pathelement *pathlist;
@@ -48,12 +55,10 @@ int sh( int argc, char **argv, char **envp )
   while ( go )
   {
     /* print your prompt */
-    
     //generate directory
     char *workingdir;
     //calloc the args array
     char **args = calloc(MAXARGS, sizeof(char*));
-    
     workingdir =getcwd(NULL, 0);
     if(strcmp(prompt," ") == 0){ //ignore the prompt if it is the default space
       printf("[%s]",workingdir);
@@ -64,29 +69,26 @@ int sh( int argc, char **argv, char **envp )
     free(workingdir);//malloc'd by getcwd
     printf(">>");
     /* get command line and process */
-    if (fgets(input, 64 , stdin) != NULL)
-  {
+    if (fgets(input, 64 , stdin) != NULL){
     if(strcmp(input,"\n") != 0){
     int len = strlen(input);
     input[len - 1] = '\0';
-
     char *copy = (char*)malloc((strlen(input)+1)*sizeof(char));
     strcpy(copy,input);
-
     //use strtok to generate the tokens
-   
     char *argument = strtok(input, " "); //first should be the command, next are the args
-    int numArgs = 0;
+    int i = 0;
     while(argument != NULL){ //fill up arguments with args
-      args[numArgs] = argument;
+      args[i] = argument;
       argument = strtok(NULL, " ");  
-      numArgs++;
+      i++;
     }// now args is full of our arguments
-    
 
     /* check for each built in command and implement */
       if((strcmp(args[0],"where")==0)|| //internal command
       (strcmp(args[0],"which")==0)||
+      (strcmp(args[0],"watchmail")==0)||
+      (strcmp(args[0],"watchuser")==0)||
       (strcmp(args[0],"pwd")==0)||
       (strcmp(args[0],"exit")==0)||
       (strcmp(args[0],"cd")==0)||
@@ -98,9 +100,6 @@ int sh( int argc, char **argv, char **envp )
       (strcmp(args[0],"setenv")==0) ){
         printf("Executing built-in [%s]\n",args[0]);
       }
-      
-
-     
      /*  else  program to exec */
      if(strcmp(args[0],"where")==0){
        if(args[1] != NULL)
@@ -125,7 +124,6 @@ int sh( int argc, char **argv, char **envp )
        else{
          printf("Which: not enough arguments\n");
        }
-       
      }
        /* find it */
        /* do fork(), execve() and waitpid() */
@@ -153,23 +151,28 @@ int sh( int argc, char **argv, char **envp )
       
        return 0;
      }
-     else if(strcmp(args[0],"cd")==0){
-       if(args[2] != NULL)
+    else if(strcmp(args[0],"cd")==0){
+      if(args[2] != NULL){
         printf("cd: too many arguments\n");
+      }
       else{
        changeDir(args);
       }
-
-     }
+    }
      else if(strcmp(args[0],"list")==0){
        list(args);
+     }
+     else if(strcmp(args[0],"watchmail")==0){
+        watchmail(args);
+     }
+     else if(strcmp(args[0],"watchuser")==0){
+        watchuser(args);
      }
      else if(strcmp(args[0],"pid")==0){
        if(args[1] != NULL)
        printf("pid: too many arguments\n");
        else
        printPid();
-       
      }
      else if(strcmp(args[0],"prompt")==0){
        promptCmd(args, prompt);
@@ -190,15 +193,13 @@ int sh( int argc, char **argv, char **envp )
         else
        setEnviornment(envp,args,pathlist);
      }
-
      else{
-       forkit(args, envp,pathlist,copy,numArgs);
+       forkit(args, envp,pathlist,copy,i);
 
     }
     free(copy);
   }
   else{
-    
     //it was a newline so we do nothing
   }
   }
@@ -207,8 +208,6 @@ int sh( int argc, char **argv, char **envp )
       clearerr(stdin);
       //control + D was pressed
   }
-
-      
       free(args);
   }
 
@@ -708,5 +707,130 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
         //fprintf(stderr, "%s: Command not found.\n", args[0]);
 }
 
+void addnode(pthread_t thread, char *data) {
+    node *tmp = malloc(sizeof(node));
+    tmp->thread = thread;
+    tmp->data = data;
+    node *headref = head;
+    tmp->next = NULL;
+    if(!head){
+      head = tmp;
+      return;
+    }
+    while(headref->next != NULL){
+      headref = headref->next;
+    }
+    headref->next = tmp;
+}
+void watchmail(char **args){
+  pthread_t thread;
+  if(args[2]!= NULL){if(!strcmp(args[2], "off")){ //it can take an optional second argument of "off" to turn off of watching of mails for that file.
+    node *tmp = head;
+    node *prev;
+    if(tmp != NULL && !strcmp(tmp->data, args[1])){
+      pthread_cancel(tmp->thread);
+      head = tmp->next;
+      free(tmp);
+      return;
+    }
+    while(tmp->next != NULL){
+      if(!strcmp(tmp->data, args[1])){ //kill the thread
+        printf("Cancelling thread %d\n", tmp->thread); //delete node...
+        pthread_cancel(tmp->thread);
+        //Cannot free since it might break the list. Free all on exit.
+      }
+      prev = tmp;
+      tmp = tmp->next;
+    }
+    prev->next = tmp->next;
+  }}
+  else{ //actually watch the file with pthread_create(3) 
+    if(pthread_create(&thread, NULL, &watchmailthread, args)) { //on success, returns 0
+      fprintf(stderr, "Error creating thread\n");
+    }
+    //printf("THE THREAD IS: %d\n", thread);
+    addnode(thread, args[1]); //append the thread ID to the linked list.
+  }
+}
+void *watchmailthread(char **args){
+  struct stat sb;
+  struct stat sb1;
+  if(stat(args[1], &sb)){
+    printf("Error getting file information\n");
+  }
+  int size = sb.st_size;
+  while(1){ //A sleep for 1 second should be in the loop
+    sleep(1);
+    if(!stat(args[1], &sb1)){
+      if(sb1.st_size != size){
+        struct timeval tv;
+        time_t timenow;
+        struct tm *nowtm;
+        char tmbuf[64], buf[64];
+        gettimeofday(&tv, NULL);
+        timenow = tv.tv_sec;
+        nowtm = localtime(&timenow);
+        strftime(tmbuf, sizeof(tmbuf), "%Y-%m-%d %H:%M:%S", nowtm);
+        printf("\a\n BEEP You've Got Mail in %s at %s \n", args[1], tmbuf);
+        size = sb1.st_size;
+      }
+    }
+  }
+}
+void watchuser(char **args){
+//The first time watchuser is ran, a (new) thread should be created/started via pthread_create(3)
+  pthread_mutex_init(&watchusert, NULL);
+  pthread_mutex_lock(&watchusert);
+  if(args[2] == NULL){ //INITIALIZE THE LINKED LIST / ADD TO LINKED LIST
+    nodeu *tmp = malloc(sizeof(node));
+    tmp->isLogged = 0;
+    tmp->next= NULL;
+    tmp->data = args[1];
+    if(headu){
+      nodeu *tmp2 = headu;
+      while(tmp2->next){
+        tmp2 = tmp2->next;
+      }
+      tmp2->next = tmp;
+    }
+    else{
+      headu = tmp;
+    }
+    struct utmpx *up;
+    setutxent();
+    while (up = getutxent()){	/* get an entry */
+      if (up->ut_type == USER_PROCESS && !strcmp(tmp->data, up->ut_user)){	/* only care about users */
+        tmp->isLogged = 1; //This allows for a check later to see current users. Do this for all users.
+        printf("%s has logged on %s from %s\n", up->ut_user, up->ut_line, up ->ut_host);
+      }
+    }
+  }
+  else if(args[2]){ //"off" implementation
 
-
+  }
+  pthread_mutex_unlock(&watchusert);
+  if(pthread_create(&threadu, NULL, &watchuserthread, args)) { //same as watchmail basically. 
+      fprintf(stderr, "Error creating thread\n");
+  }
+}
+//The thread should get the list of users from a global linked list which the calling function 
+//(of the main thread) will modify by either inserting new users or turning off existing watched users.
+void *watchuserthread(char **args){
+  while(1){
+    nodeu *tmp = headu;
+    while(tmp){
+      if(!tmp->isLogged){
+        struct utmpx *up;
+        setutxent();
+        while (up = getutxent()){	/* get an entry */
+          if (up->ut_type == USER_PROCESS && !strcmp(tmp->data, up->ut_user)){	/* only care about users */
+            tmp->isLogged = 1; //This allows for a check later to see current users. Do this for all users.
+            printf("%s has logged on %s from %s\n", up->ut_user, up->ut_line, up ->ut_host);
+          }
+        }
+      }
+      tmp = tmp->next;
+    }
+    sleep(20);
+  }
+}
