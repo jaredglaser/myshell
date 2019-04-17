@@ -481,7 +481,7 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
         
         
         
-        char **args = calloc(numArgs, sizeof(char*));
+        char **args = calloc(MAXARGS, sizeof(char*));
         
         
         if(leftside){
