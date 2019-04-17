@@ -826,22 +826,12 @@ void *watchmailthread(char **args){
 }
 void watchuser(char **args){
 //The first time watchuser is ran, a (new) thread should be created/started via pthread_create(3)
-
-
   if(watchingUser==0){
     watchingUser = 1;
-  
-  if(pthread_create(&threadu, NULL, &watchuserthread, args)) { //same as watchmail basically.
-      fprintf(stderr, "Error creating thread\n");
-  }
-  }
-
-
-
-
-
-  //pthread_mutex_init(&watchusert, NULL);
-  
+    if(pthread_create(&threadu, NULL, &watchuserthread, args)) { //same as watchmail basically.
+        fprintf(stderr, "Error creating thread\n");
+    }
+  }  
   if(args[2] == NULL){ //INITIALIZE THE LINKED LIST / ADD TO LINKED LIST
     pthread_mutex_lock(&watchusert);
     addnodeu(0, args[1]);
@@ -853,14 +843,26 @@ void watchuser(char **args){
       looppos++;
       looper = looper->next;
     }
-
   }
   else if(args[2]){ //"off" implementation
- 
+    nodeu *tmp = headu;
+    nodeu *tmp2 = headu;
+    if(!strcmp(args[1], tmp->data)){
+      headu = tmp->next;
+      free(tmp->data);
+      free(tmp);
+    }
+    else{
+      while(tmp2 = tmp->next){
+        if(!strcmp(tmp2->data, args[1])){
+          tmp->next = tmp2->next;
+          free(tmp2->data);
+          free(tmp2);
+        }
+      }
+    }
   }
-
 }
-
 //The thread should get the list of users from a global linked list which the calling function
 //(of the main thread) will modify by either inserting new users or turning off existing watched users.
 void *watchuserthread(char **args){
