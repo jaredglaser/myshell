@@ -449,6 +449,8 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
         int fd;
         int leftside = 1;
         int wasBackround = 0;
+        int pipefd[2];
+        int numArgsPipe = 0;
         if(strcmp(o_args[numArgs-1],"&")==0){
             operator = -1;
             wasBackround = 1;
@@ -474,6 +476,10 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
             offset = i; // file < command
             operator = 5; 
           }
+          if(strcmp(o_args[i], "|") ==0){
+            offset = i;
+            operator = 6;
+          }
 
         }
         char** newArgs;
@@ -493,12 +499,17 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
             offset = numArgs;
             leftside = 0;
           }
+          else if(operator == 6){ //command flag | command flag
+            numArgsPipe = numArgs - offset - 1;
+            numArgs = offset;
+            offset = 0;
+          }
         }
         
         
         
         char **args = calloc(MAXARGS, sizeof(char*));
-        
+        char **argsPipe = calloc(MAXARGS, sizeof(char*));
         
         if(leftside){
           int j = 0;
@@ -515,10 +526,22 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
         }
         }
 
+        if(operator == 6){ //pipe needs pipe array filled
+          for(int i =0; i<numArgsPipe; i++){
+            argsPipe[i] = o_args[numArgs+1+i];
+          }
+        }
+
 
         //TESTING
         for(int i=0;i<numArgs;i++){
           printf("[%d] %s\n",i,args[i]);
+        }
+
+        if(operator == 6){
+          for(int i=0;i<numArgs;i++){
+          printf("[%d] %s\n",i,argsPipe[i]);
+        }
         }
 
         int PID = fork();
