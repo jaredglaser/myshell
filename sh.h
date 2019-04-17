@@ -12,8 +12,7 @@ typedef struct nodeu
     char *data;
     struct nodeu *next;
 }nodeu;
-node *head; //global head of LL, probably not the best place for it.
-nodeu *headu; //for the watchuser
+
 int pid;
 int sh( int argc, char **argv, char **envp);
 void *which(char *command, struct pathelement *pathlist);
@@ -28,10 +27,10 @@ void nullify(char **args);
 void printPid();
 void promptCmd(char **args, char* prompt);
 void killProc(char **args);
-void forkit(char**args, char **envp,struct pathelement *pathlist,char*copy,int numArgs);
 void *watchmailthread(char **args);
 void watchmail(char **args);
 void addnode(pthread_t thread, char *data);
+void addnodeu(int thread, char *data);
 void watchuser(char **args);
 void *watchuserthread(char **args);
 
