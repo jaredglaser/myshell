@@ -23,6 +23,7 @@ nodeu *headu = NULL; //for watchuser
 pthread_mutex_t watchusert = PTHREAD_MUTEX_INITIALIZER;
 pthread_t threadu = 0;
 int watchingUser = 0;
+int zombieIDs[40];
 
 int sh( int argc, char **argv, char **envp )
 {
@@ -55,6 +56,18 @@ int sh( int argc, char **argv, char **envp )
 
   while ( go )
   {
+    /*handle removing zombies*/
+    for(int i=0; i<40;i++){
+      if(zombieIDs[i] != NULL){
+      //printf("Waiting for %d",zombieIDs[i]);
+      if(waitpid(zombieIDs[i], &status, WNOHANG)!=0){
+        zombieIDs[i] = NULL;
+      } 
+      }
+
+    }
+
+
     /* print your prompt */
     //generate directory
     char *workingdir;
@@ -435,8 +448,10 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
         int operator = 0;
         int fd;
         int leftside = 1;
+        int wasBackround = 0;
         if(strcmp(o_args[numArgs-1],"&")==0){
             operator = -1;
+            wasBackround = 1;
         }
         for(int i=0; i<numArgs; i++){ //look for a > or whatev
           if(strcmp(o_args[i],">") ==0){
@@ -692,8 +707,21 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
           
         }
         else{ //parent
-          if(strcmp(args[numArgs-1],"&")==0)
-          waitpid(-1, &status, WNOHANG);
+          if(wasBackround){
+          //add to the backround array
+          int added=0;
+          for(int i=0; i< 40; i++){
+            if(zombieIDs[i]== NULL){
+              //printf("Added %d",PID);
+              zombieIDs[i] = PID;
+              added=1;
+              break;
+            }
+          }
+          if(!added){
+            printf("Too many backround processes.\n");
+          }
+          }
           else
           waitpid(-1, &status, 0);
 
