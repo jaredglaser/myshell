@@ -121,10 +121,10 @@ int sh( int argc, char **argv, char **envp )
      }
      else if(!wasBuilt){
        if(strstr(args,"|")==0){
-          forkitPipe(args, envp,pathlist,copy,i,0);
+          forkit(args, envp,pathlist,copy,i,0);
        }
        else if(strstr(args,"|&")==0){
-          forkitPipe(args, envp,pathlist,copy,i,1);
+          forkit(args, envp,pathlist,copy,i,1);
        }
        else{
         forkit(args, envp,pathlist,copy,i);
@@ -459,81 +459,6 @@ void setEnviornment(char **envp, char**args,struct pathelement *pathlist){
     printf("setenv: Too many arguments.\n");
   }
 }
-void forkitPipe(char**o_args, char **envp,struct pathelement *pathlist,char*copy, int numArgs, int type){
-  int offset = 0;
-  int operator = 0;
-  int fd;
-  int leftside = 1;
-  int wasBackround = 0;
-  int pipefd[2];
-  int numArgsPipe = 0;
-  for(int i=0; i<numArgs; i++){ //look for a | or whatev
-    if(strcmp(o_args[i], "|") ==0){
-            offset = i;
-            operator = 6;
-    }
-  }
-
-  if(operator == 6){ //command flag | command flag
-    numArgsPipe = numArgs - offset - 1;
-    numArgs = offset;
-    offset = 0;
-  }
-
-  char **args = calloc(MAXARGS, sizeof(char*));
-  char **argsPipe = calloc(MAXARGS, sizeof(char*));
-        
-  
-    int j = 0;
-    for(int i=offset;i<numArgs+offset;i++){
-      args[j] = o_args[i];
-      j++;
-    }
-  
- 
-    for(int i =0; i<numArgsPipe; i++){
-      argsPipe[i] = o_args[numArgs+1+i];
-      }
-    
-
-
-    //TESTING
-    for(int i=0;i<numArgs;i++){
-      printf("[%d] %s\n",i,args[i]);
-    }
-
-    
-    for(int i=0;i<numArgs;i++){
-      printf("[%d] %s\n",i,argsPipe[i]);
-      }
-    
-
-if(!fork()){
-  int pipeStatus;
-        int pfds[2];
-pipe(pfds);
-pid_t first = fork();
-if (first) {
-    close(1);       /* close normal stdout */
-    dup(pfds[1]);   /* make stdout same as pfds[1] */
-    close(pfds[0]); /* we don't need this */
-   execve(args[0],args,envp);
-   close(pfds[1]);
-} else {
-    close(0);       /* close normal stdin */
-    dup(pfds[0]);   /* make stdin same as pfds[0] */
-    close(pfds[1]); /* we don't need this */
-    execve(argsPipe[0], argsPipe, envp);
-    waitpid(first, &pipeStatus, 0);
-        //fprintf(stderr, "%s: Command not found.\n", args[0])
-}
-  
-}
-else{
-fd = open("/dev/tty", O_WRONLY);
-}
-}
-
 void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, int numArgs){
         
         int offset = 0;
@@ -568,8 +493,6 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
             offset = i; // file < command
             operator = 5; 
           }
-          
-
         }
         char** newArgs;
         
@@ -638,6 +561,78 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
         char * res;
         if(PID == 0){ //child
         if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/' || whichRet(args[0],pathlist)){
+          int offset = 0;
+  int operator = 0;
+  int leftside = 1;
+  int wasBackround = 0;
+  int pipefd[2];
+  int numArgsPipe = 0;
+  for(int i=0; i<numArgs; i++){ //look for a | or whatev
+    if(strcmp(o_args[i], "|") ==0){
+            offset = i;
+            operator = 6;
+    }
+  }
+
+  if(operator == 6){ //command flag | command flag
+    numArgsPipe = numArgs - offset - 1;
+    numArgs = offset;
+    offset = 0;
+  }
+
+  char **args = calloc(MAXARGS, sizeof(char*));
+  char **argsPipe = calloc(MAXARGS, sizeof(char*));
+        
+  
+    int j = 0;
+    for(int i=offset;i<numArgs+offset;i++){
+      args[j] = o_args[i];
+      j++;
+    }
+  
+ 
+    for(int i =0; i<numArgsPipe; i++){
+      argsPipe[i] = o_args[numArgs+1+i];
+      }
+    
+
+
+    //TESTING
+    for(int i=0;i<numArgs;i++){
+      printf("[%d] %s\n",i,args[i]);
+    }
+
+    
+    for(int i=0;i<numArgs;i++){
+      printf("[%d] %s\n",i,argsPipe[i]);
+      }
+    
+
+    if(!fork()){
+      int pipeStatus;
+            int pfds[2];
+    pipe(pfds);
+    pid_t first = fork();
+    if (first) {
+        close(1);       /* close normal stdout */
+        dup(pfds[1]);   /* make stdout same as pfds[1] */
+        close(pfds[0]); /* we don't need this */
+      execve(args[0],args,envp);
+      close(pfds[1]);
+    } else {
+        close(0);       /* close normal stdin */
+        dup(pfds[0]);   /* make stdin same as pfds[0] */
+        close(pfds[1]); /* we don't need this */
+        execve(argsPipe[0], argsPipe, envp);
+        waitpid(first, &pipeStatus, 0);
+            //fprintf(stderr, "%s: Command not found.\n", args[0])
+    }
+      
+    }
+    else{
+    fd = open("/dev/tty", O_WRONLY);
+    }
+          
           int fd;
           if(operator == 1){
             //handle case with >
