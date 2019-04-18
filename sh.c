@@ -108,18 +108,22 @@ int sh( int argc, char **argv, char **envp )
         free(commandline);
         free(owd);
         nodeu *tmpu;
+        if(headu != NULL){ //handle if never watched user
         while (headu->next != NULL){
           headu = tmpu;
           tmpu = headu->next;
           free(headu->data);
           free(headu);
         }
+        }
+        if(head != NULL){ //handle if never watched mail 
         node *tmp;
         while (head->next != NULL){
           head = tmp;
           tmpu = head->next;
           free(headu->data);
           free(head);
+        }
         }
         while(pathlist->next != NULL) {
           struct pathelement* next = pathlist->next;
@@ -724,6 +728,9 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
             }
           }
 
+        //handle frees
+        free(args);
+        free(argsPipe);
         
 
         //fprintf(stderr, "%s: Command not found.\n", args[0]);
