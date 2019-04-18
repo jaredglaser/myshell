@@ -115,8 +115,11 @@ int sh( int argc, char **argv, char **envp )
         printf("Executing built-in [%s]\n",args[0]);
       }
      /*  else  program to exec */
-     if(!isBuiltin(args, pathlist))
-     {
+     int wasBuilt=0;
+     if(wasBuilt = isBuiltin(args, pathlist,envp,copy,prompt,commandline,owd) == 2){
+       return(0);
+     }
+     else if(wasBuilt){
        if(strstr(args,"|")==0){
           forkitPipe(args, envp,pathlist,copy,i,0);
        }
@@ -194,7 +197,7 @@ int isBuiltin(char** args, struct pathelement* pathlist, char **envp, char* copy
 
       free(args);
       
-       return 0;
+       return 2;
      }
     else if(strcmp(args[0],"cd")==0){
       if(args[2] != NULL){
