@@ -119,7 +119,7 @@ int sh( int argc, char **argv, char **envp )
      if(wasBuilt = isBuiltin(args, pathlist,envp,copy,prompt,commandline,owd) == 2){
        return(0);
      }
-     else if(wasBuilt){
+     else if(!wasBuilt){
        if(strstr(args,"|")==0){
           forkitPipe(args, envp,pathlist,copy,i,0);
        }
@@ -508,78 +508,23 @@ void forkitPipe(char**o_args, char **envp,struct pathelement *pathlist,char*copy
       }
     
 
-int PID = fork();
-        int status;
-        char * res;
-        if(PID == 0){ //child
-        if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/' || whichRet(args[0],pathlist)){
-          int fd;
-          if(operator == 1){
-            //handle case with >
-            if(close(STDOUT_FILENO)==-1){
-              perror("Close Error");
-            }
-            if(fd = open(o_args[numArgs+1],O_CREAT|O_WRONLY|O_TRUNC,S_IRWXU)==-1){
-              perror("Open Error");
-            }
-            else{
-              dup(fd);
-              close(fd);
-            }
-          }
-          
-        }
 
-         
-          //if the arg contains ./ ../ or starts with a /
-          if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/'){ 
-            if (access(args[0], X_OK) == 0){ //if the path given is to an executable
-              printf("Executing [%s]\n",args[0]);
-              if(execve(args[0],args,envp)==-1){
-                perror("exec");
-              }
-            }
-            else{
-              printf("Executable not found.\n");
-            }
-          }
-          /*
-          // If the command is in the path
-          */
-          else if(res = whichRet(args[0],pathlist)){
-            printf("Executing [%s]\n",args[0]);
+        int pfds[2];
+pipe(pfds);
+if (!fork()) {
+    close(1);       /* close normal stdout */
+    dup(pfds[1]);   /* make stdout same as pfds[1] */
+    close(pfds[0]); /* we don't need this */
+   execve(args[0],args,envp);
+} else {
+    close(0);       /* close normal stdin */
+    dup(pfds[0]);   /* make stdin same as pfds[0] */
+    close(pfds[1]); /* we don't need this */
+    execve(argsPipe[0], argsPipe, envp);
 
-            if(execve(res,args,envp)==-1){
-              perror("exec");
-            }
-            
-            free(res);
-            
-          }
-          /*
-          // If the command is not in the path
-          */
-          else{
-            printf("Command not found\n");
-          }
-          
-        }
-        else{ //parent
-          waitpid(-1, &status, 0);
-
-          if(operator != 0){
-              fd = open("/dev/tty", O_WRONLY);
-            }
-
-          
-          
-        }
-
-        //fprintf(stderr, "%s: Command not found.\n", args[0]);
-
-
-
-
+        //fprintf(stderr, "%s: Command not found.\n", args[0])
+}
+  fd = open("/dev/tty", O_WRONLY);
 }
 
 void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, int numArgs){
