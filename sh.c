@@ -111,6 +111,8 @@ int sh( int argc, char **argv, char **envp )
           nodeu *tmpu = headu;;
           free(tmpu->data);
           free(tmpu);
+          if(headu->next == NULL)
+            break;
           headu = headu->next;
         }
         }
@@ -120,6 +122,8 @@ int sh( int argc, char **argv, char **envp )
           node *tmp = head;
           free(tmp->data);
           free(tmp);
+          if(head->next == NULL)
+            break;
           head = head->next;
         }
         }
@@ -483,6 +487,12 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
         }
         
         if(operator !=6){
+          if(!(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/' || whichRet(args[0],pathlist))){
+            goto freeTheGoods;
+          }
+        
+
+
         int PID = fork();
         int status;
         char * res;
@@ -732,6 +742,7 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
           }
 
         //handle frees
+        freeTheGoods:
         free(args);
         free(argsPipe);
         
