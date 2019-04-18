@@ -97,11 +97,8 @@ int sh( int argc, char **argv, char **envp )
     }// now args is full of our arguments
 
     /* check for each built in command and implement */
-      if(isBuiltin(args[0])){
+      if(isBuiltin(args)){
       printf("Executing built-in [%s]\n",args[0]);
-      if(!strcmp(args[0], "noclobber")){
-        noclobber = 1;
-      }
       if(strcmp(args[0],"exit")==0){
         //free fields
         free(copy);
@@ -389,7 +386,7 @@ void setEnviornment(char **envp, char**args,struct pathelement *pathlist){
 }
 
 void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, int numArgs, char* prompt){
-        
+        int causeError = 0;
         int offset = 0;
         int operator = 0;
         int fd;
@@ -426,6 +423,10 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
             offset = i;
             operator = 6;
           }
+          if(strcmp(o_args[i], "|&") ==0){
+            offset = i;
+            operator = 7;
+          }
 
         }
         char** newArgs;
@@ -445,7 +446,7 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
             offset = numArgs;
             leftside = 0;
           }
-          else if(operator == 6){ //command flag | command flag
+          else if(operator == 6 | operator == 7){ //command flag | command flag
             numArgsPipe = numArgs - offset - 1;
             numArgs = offset;
             offset = 0;
@@ -472,7 +473,7 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
         }
         }
 
-        if(operator == 6){ //pipe needs pipe array filled
+        if(operator == 6 | operator == 7){ //pipe needs pipe array filled
           for(int i =0; i<numArgsPipe; i++){
             argsPipe[i] = o_args[numArgs+1+i];
           }
@@ -490,10 +491,30 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
         }
         }
         
-        if(operator !=6){
+        if(operator !=6 && operator != 7){
           if(!(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/' || whichRet(args[0],pathlist))){
+            if(operator != 0){
+              causeError = 1;
+            }
+            else{
+            printf("Command not found.\n");
+            goto freeTheGoods;
+            }
+          }
+
+
+        // > >& 
+          if((operator == 1 || operator == 2) && noclobber == 1 && !access(o_args[numArgs+1], F_OK)){ //should not overwrite
+            //tell the user that they cannot overwrite
+            printf("%s : file exists\n",o_args[numArgs+1]);
             goto freeTheGoods;
           }
+          // >> >>&
+          if((operator == 3 || operator == 4) && noclobber == 1 && access(o_args[numArgs+1], F_OK)){ //should not create new file
+            //tell the user that they cannot overwrite
+            printf("%s : file does not exist, will not append\n",o_args[numArgs+1]);
+            goto freeTheGoods;
+          }  
         
 
 
@@ -501,8 +522,20 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
         int status;
         char * res;
         if(PID == 0){ //child
-        if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/' || whichRet(args[0],pathlist)){
+        //if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/' || whichRet(args[0],pathlist)){
           int fd;
+          
+
+
+
+
+
+
+
+
+
+
+
           if(operator == 1){
             //handle case with >
             if(close(STDOUT_FILENO)==-1){
@@ -588,7 +621,7 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
               close(fd);
             }
           }
-        }
+        //}
 
           int isWild = 0;
           glob_t globbuf;
@@ -678,8 +711,10 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
           // If the command is not in the path
           */
           else{
-            printf("Command not found\n");
+            fprintf(stderr,"Command not found\n");
+            kill(getpid(), SIGKILL);
           }
+          printf("BEPIS\n");
           
         }
         else{ //parent
@@ -725,7 +760,12 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
                 close(1);
                 dup(pfds[1]);
                 close(pfds[0]);
-                if(!isBuiltin(args[0])){
+                if(operator == 7){
+                  close(2);
+                  dup(pfds[1]);
+                  close(pfds[0]);
+                }
+                if(!isBuiltin(args)){
                   if (-1 == execve(whichRet(args[0],pathlist), args, envp)) {
                     perror(args[0]);
                   }
@@ -964,6 +1004,17 @@ void builtIns(char**args, struct pathelement* pathlist,char*prompt, char** envp)
        else
        printf("Where: not enough arguments\n");
      }
+     else if (strcmp(args[0],"unset")==0 && strcmp(args[1],"noclobber")==0){
+       noclobber = 0;
+        printf("noclobber unset\n");
+
+
+     }
+     else if(strcmp(args[0],"set")==0 && strcmp(args[1],"noclobber")==0){
+       noclobber = 1;
+        printf("noclobber set\n");
+
+     }
      else if(strcmp(args[0],"which")==0){
        if(args[1] != NULL){
        for(int i = 1; i<MAXARGS; i ++){
@@ -1029,21 +1080,22 @@ void builtIns(char**args, struct pathelement* pathlist,char*prompt, char** envp)
      }
 }
 
-int isBuiltin(char* command){
-  if((strcmp(command,"where")==0)|| //internal command
-      (strcmp(command,"which")==0)||
-      (strcmp(command,"watchmail")==0)||
-      (strcmp(command,"watchuser")==0)||
-      (strcmp(command,"pwd")==0)||
-      (strcmp(command,"exit")==0)||
-      (strcmp(command,"cd")==0)||
-      (strcmp(command,"list")==0)||
-      (strcmp(command,"pid")==0)||
-      (strcmp(command,"prompt")==0) ||
-      (strcmp(command,"kill")==0) ||
-      (strcmp(command,"printenv")==0) ||
-      (strcmp(command,"noclobber")==0) ||
-      (strcmp(command,"setenv")==0) ){
+int isBuiltin(char** command){
+  if((strcmp(command[0],"where")==0)|| //internal command
+      (strcmp(command[0],"which")==0)||
+      (strcmp(command[0],"watchmail")==0)||
+      (strcmp(command[0],"watchuser")==0)||
+      (strcmp(command[0],"pwd")==0)||
+      (strcmp(command[0],"exit")==0)||
+      (strcmp(command[0],"cd")==0)||
+      (strcmp(command[0],"list")==0)||
+      (strcmp(command[0],"pid")==0)||
+      (strcmp(command[0],"prompt")==0) ||
+      (strcmp(command[0],"kill")==0) ||
+      (strcmp(command[0],"printenv")==0) ||
+      (strcmp(command[0],"set")==0 && strcmp(command[1],"noclobber")==0) ||
+      (strcmp(command[0],"unset")==0 && strcmp(command[1],"noclobber")==0) ||
+      (strcmp(command[0],"setenv")==0) ){
         return 1;
   }
   else{
