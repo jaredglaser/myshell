@@ -24,6 +24,7 @@ pthread_mutex_t watchusert = PTHREAD_MUTEX_INITIALIZER;
 pthread_t threadu = 0;
 int watchingUser = 0;
 int zombieIDs[40];
+int noclobber = 0;
 
 int sh( int argc, char **argv, char **envp )
 {
@@ -98,6 +99,9 @@ int sh( int argc, char **argv, char **envp )
     /* check for each built in command and implement */
       if(isBuiltin(args[0])){
       printf("Executing built-in [%s]\n",args[0]);
+      if(!strcmp(args[0], "noclobber")){
+        noclobber = 1;
+      }
       if(strcmp(args[0],"exit")==0){
         //free fields
         free(copy);
@@ -108,7 +112,7 @@ int sh( int argc, char **argv, char **envp )
         if(headu != NULL){ //handle if never watched user
         
         while (headu != NULL){
-          nodeu *tmpu = headu;;
+          nodeu *tmpu = headu;
           free(tmpu->data);
           free(tmpu);
           headu = headu->next;
@@ -1027,6 +1031,7 @@ int isBuiltin(char* command){
       (strcmp(command,"prompt")==0) ||
       (strcmp(command,"kill")==0) ||
       (strcmp(command,"printenv")==0) ||
+      (strcmp(command,"noclobber")==0) ||
       (strcmp(command,"setenv")==0) ){
         return 1;
   }
