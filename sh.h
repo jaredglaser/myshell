@@ -33,6 +33,7 @@ void addnode(pthread_t thread, char *data);
 void addnodeu(int thread, char *data);
 void watchuser(char **args);
 void *watchuserthread(char **args);
+void forkitPipe(char**o_args, char **envp,struct pathelement *pathlist,char*copy, int numArgs, int type);
 
 
 #define PROMPTMAX 32

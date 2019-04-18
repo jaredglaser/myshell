@@ -115,7 +115,38 @@ int sh( int argc, char **argv, char **envp )
         printf("Executing built-in [%s]\n",args[0]);
       }
      /*  else  program to exec */
-     if(strcmp(args[0],"where")==0){
+     if(!isBuiltin(args, pathlist))
+     {
+       if(strstr(args,"|")==0){
+          forkitPipe(args, envp,pathlist,copy,i,0);
+       }
+       else if(strstr(args,"|&")==0){
+          forkitPipe(args, envp,pathlist,copy,i,1);
+       }
+       else{
+        forkit(args, envp,pathlist,copy,i);
+       }
+    }
+    free(copy);
+  }
+  else{
+    //it was a newline so we do nothing
+  }
+  }
+  else{
+      printf("\n");
+      clearerr(stdin);
+      //control + D was pressed
+  }
+      free(args);
+  }
+
+  return 0;
+} /* sh() */
+
+int isBuiltin(char** args, struct pathelement* pathlist, char **envp, char* copy, char * prompt, char * commandline, char * owd){
+
+  if(strcmp(args[0],"where")==0){
        if(args[1] != NULL)
        for(int i = 0; i<MAXARGS; i ++){
          if(args[i] != NULL)
@@ -208,26 +239,10 @@ int sh( int argc, char **argv, char **envp )
        setEnviornment(envp,args,pathlist);
      }
      else{
-       forkit(args, envp,pathlist,copy,i);
-
-    }
-    free(copy);
-  }
-  else{
-    //it was a newline so we do nothing
-  }
-  }
-  else{
-      printf("\n");
-      clearerr(stdin);
-      //control + D was pressed
-  }
-      free(args);
-  }
-
-  return 0;
-} /* sh() */
-
+       return 0;
+     }
+     return 1; //if one of these were called
+}
 
 void *which(char *command, struct pathelement *p)
 {
@@ -441,6 +456,128 @@ void setEnviornment(char **envp, char**args,struct pathelement *pathlist){
     printf("setenv: Too many arguments.\n");
   }
 }
+void forkitPipe(char**o_args, char **envp,struct pathelement *pathlist,char*copy, int numArgs, int type){
+  int offset = 0;
+  int operator = 0;
+  int fd;
+  int leftside = 1;
+  int wasBackround = 0;
+  int pipefd[2];
+  int numArgsPipe = 0;
+  for(int i=0; i<numArgs; i++){ //look for a | or whatev
+    if(strcmp(o_args[i], "|") ==0){
+            offset = i;
+            operator = 6;
+    }
+  }
+
+  if(operator == 6){ //command flag | command flag
+    numArgsPipe = numArgs - offset - 1;
+    numArgs = offset;
+    offset = 0;
+  }
+
+  char **args = calloc(MAXARGS, sizeof(char*));
+  char **argsPipe = calloc(MAXARGS, sizeof(char*));
+        
+  
+    int j = 0;
+    for(int i=offset;i<numArgs+offset;i++){
+      args[j] = o_args[i];
+      j++;
+    }
+  
+ 
+    for(int i =0; i<numArgsPipe; i++){
+      argsPipe[i] = o_args[numArgs+1+i];
+      }
+    
+
+
+    //TESTING
+    for(int i=0;i<numArgs;i++){
+      printf("[%d] %s\n",i,args[i]);
+    }
+
+    
+    for(int i=0;i<numArgs;i++){
+      printf("[%d] %s\n",i,argsPipe[i]);
+      }
+    
+
+int PID = fork();
+        int status;
+        char * res;
+        if(PID == 0){ //child
+        if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/' || whichRet(args[0],pathlist)){
+          int fd;
+          if(operator == 1){
+            //handle case with >
+            if(close(STDOUT_FILENO)==-1){
+              perror("Close Error");
+            }
+            if(fd = open(o_args[numArgs+1],O_CREAT|O_WRONLY|O_TRUNC,S_IRWXU)==-1){
+              perror("Open Error");
+            }
+            else{
+              dup(fd);
+              close(fd);
+            }
+          }
+          
+        }
+
+         
+          //if the arg contains ./ ../ or starts with a /
+          if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/'){ 
+            if (access(args[0], X_OK) == 0){ //if the path given is to an executable
+              printf("Executing [%s]\n",args[0]);
+              if(execve(args[0],args,envp)==-1){
+                perror("exec");
+              }
+            }
+            else{
+              printf("Executable not found.\n");
+            }
+          }
+          /*
+          // If the command is in the path
+          */
+          else if(res = whichRet(args[0],pathlist)){
+            printf("Executing [%s]\n",args[0]);
+
+            if(execve(res,args,envp)==-1){
+              perror("exec");
+            }
+            
+            free(res);
+            
+          }
+          /*
+          // If the command is not in the path
+          */
+          else{
+            printf("Command not found\n");
+          }
+          
+        }
+        else{ //parent
+          waitpid(-1, &status, 0);
+
+          if(operator != 0){
+              fd = open("/dev/tty", O_WRONLY);
+            }
+
+          
+          
+        }
+
+        //fprintf(stderr, "%s: Command not found.\n", args[0]);
+
+
+
+
+}
 
 void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, int numArgs){
         
@@ -476,10 +613,7 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
             offset = i; // file < command
             operator = 5; 
           }
-          if(strcmp(o_args[i], "|") ==0){
-            offset = i;
-            operator = 6;
-          }
+          
 
         }
         char** newArgs;
