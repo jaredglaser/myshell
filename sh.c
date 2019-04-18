@@ -99,19 +99,7 @@ int sh( int argc, char **argv, char **envp )
     }// now args is full of our arguments
 
     /* check for each built in command and implement */
-      if((strcmp(args[0],"where")==0)|| //internal command
-      (strcmp(args[0],"which")==0)||
-      (strcmp(args[0],"watchmail")==0)||
-      (strcmp(args[0],"watchuser")==0)||
-      (strcmp(args[0],"pwd")==0)||
-      (strcmp(args[0],"exit")==0)||
-      (strcmp(args[0],"cd")==0)||
-      (strcmp(args[0],"list")==0)||
-      (strcmp(args[0],"pid")==0)||
-      (strcmp(args[0],"prompt")==0) ||
-      (strcmp(args[0],"kill")==0) ||
-      (strcmp(args[0],"printenv")==0) ||
-      (strcmp(args[0],"setenv")==0) ){
+      if(isBuiltin(args[0])){
       printf("Executing built-in [%s]\n",args[0]);
       if(strcmp(args[0],"exit")==0){
         //free fields
@@ -133,12 +121,12 @@ int sh( int argc, char **argv, char **envp )
      }
      else{
         
-        builtIns(args,pathlist,prompt,commandline,owd,copy,envp);
+        builtIns(args,pathlist,prompt,envp);
      }
       }
      /*  else  program to exec */
      else{
-       forkit(args, envp,pathlist,copy,i);
+       forkit(args, envp,pathlist,copy,i,prompt);
 
     }
     free(copy);
@@ -372,7 +360,7 @@ void setEnviornment(char **envp, char**args,struct pathelement *pathlist){
   }
 }
 
-void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, int numArgs){
+void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, int numArgs, char* prompt){
         
         int offset = 0;
         int operator = 0;
@@ -703,8 +691,13 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
                 close(1);
                 dup(pfds[1]);
                 close(pfds[0]);
-                if (-1 == execve(whichRet(args[0],pathlist), args, envp)) {
-                  perror(args[0]);
+                if(!isBuiltin(args[0])){
+                  if (-1 == execve(whichRet(args[0],pathlist), args, envp)) {
+                    perror(args[0]);
+                  }
+                }
+                else{
+                  builtIns(args,pathlist,prompt,envp);
                 }
                 close(pfds[1]);
               }
@@ -910,7 +903,7 @@ void *watchuserthread(char **args){
 }
 }
 
-void builtIns(char**args, struct pathelement* pathlist,char*prompt,char*commandline,char*owd,char*copy, char**envp){
+void builtIns(char**args, struct pathelement* pathlist,char*prompt, char** envp){
   if(strcmp(args[0],"where")==0){
        if(args[1] != NULL)
        for(int i = 0; i<MAXARGS; i ++){
@@ -985,4 +978,25 @@ void builtIns(char**args, struct pathelement* pathlist,char*prompt,char*commandl
         else
        setEnviornment(envp,args,pathlist);
      }
+}
+
+int isBuiltin(char* command){
+  if((strcmp(command,"where")==0)|| //internal command
+      (strcmp(command,"which")==0)||
+      (strcmp(command,"watchmail")==0)||
+      (strcmp(command,"watchuser")==0)||
+      (strcmp(command,"pwd")==0)||
+      (strcmp(command,"exit")==0)||
+      (strcmp(command,"cd")==0)||
+      (strcmp(command,"list")==0)||
+      (strcmp(command,"pid")==0)||
+      (strcmp(command,"prompt")==0) ||
+      (strcmp(command,"kill")==0) ||
+      (strcmp(command,"printenv")==0) ||
+      (strcmp(command,"setenv")==0) ){
+        return 1;
+  }
+  else{
+    return 0;
+  }
 }
