@@ -107,7 +107,20 @@ int sh( int argc, char **argv, char **envp )
         free(prompt);
         free(commandline);
         free(owd);
-       
+        nodeu *tmpu;
+        while (headu->next != NULL){
+          headu = tmpu;
+          tmpu = headu->next;
+          free(headu->data);
+          free(headu);
+        }
+        node *tmp;
+        while (head->next != NULL){
+          head = tmp;
+          tmpu = head->next;
+          free(headu->data);
+          free(head);
+        }
         while(pathlist->next != NULL) {
           struct pathelement* next = pathlist->next;
           free(pathlist);
@@ -757,6 +770,7 @@ void watchmail(char **args){
     if(tmp != NULL && !strcmp(tmp->data, args[1])){
       pthread_cancel(tmp->thread);
       head = tmp->next;
+      free(tmp->data);
       free(tmp);
       return;
     }
