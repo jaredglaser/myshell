@@ -104,28 +104,38 @@ int sh( int argc, char **argv, char **envp )
         free(prompt);
         free(commandline);
         free(owd);
-        nodeu *tmpu;
-        while (headu->next != NULL){
-          headu = tmpu;
-          tmpu = headu->next;
-          free(headu->data);
-          free(headu);
+        //nodeu *tmpu;
+        if(headu != NULL){ //handle if never watched user
+        
+        while (headu != NULL){
+          nodeu *tmpu = headu;;
+          free(tmpu->data);
+          free(tmpu);
+          headu = headu->next;
         }
-        node *tmp;
-        while (head->next != NULL){
-          head = tmp;
-          tmpu = head->next;
-          free(headu->data);
-          free(head);
+        }
+        if(head != NULL){ //handle if never watched mail 
+        
+        while (head != NULL){
+          node *tmp = head;
+          free(tmp->data);
+          free(tmp);
+          head = head->next;
+        }
         }
         while(pathlist->next != NULL) {
           struct pathelement* next = pathlist->next;
           free(pathlist);
           pathlist = next;
         }
+        
         free(pathlist);
 
         free(args);
+
+        if(threadu != 0){
+          free(threadu);
+        }
       
         return 0;
      }
@@ -721,6 +731,9 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
             }
           }
 
+        //handle frees
+        free(args);
+        free(argsPipe);
         
 
         //fprintf(stderr, "%s: Command not found.\n", args[0]);
@@ -842,7 +855,7 @@ void watchuser(char **args){
       looper = looper->next;
     }
   }
-  else if(args[2]){ //"off" implementation
+  else if(args[2] && strcmp(args[2],"off") == 0){ //"off" implementation
     nodeu *tmp = headu;
     nodeu *prev = headu;
     if(!strcmp(args[1], tmp->data)){
@@ -861,6 +874,9 @@ void watchuser(char **args){
           free(tmp->data);
           free(tmp);
     }
+  }
+  else{
+    printf("Invalid arguments for watchuser.\n");
   }
 }
 //The thread should get the list of users from a global linked list which the calling function
