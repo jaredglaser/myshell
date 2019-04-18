@@ -508,23 +508,30 @@ void forkitPipe(char**o_args, char **envp,struct pathelement *pathlist,char*copy
       }
     
 
-
+if(!fork()){
+  int pipeStatus;
         int pfds[2];
 pipe(pfds);
-if (!fork()) {
+pid_t first = fork();
+if (first) {
     close(1);       /* close normal stdout */
     dup(pfds[1]);   /* make stdout same as pfds[1] */
     close(pfds[0]); /* we don't need this */
    execve(args[0],args,envp);
+   close(pfds[1]);
 } else {
     close(0);       /* close normal stdin */
     dup(pfds[0]);   /* make stdin same as pfds[0] */
     close(pfds[1]); /* we don't need this */
     execve(argsPipe[0], argsPipe, envp);
-
+    waitpid(first, &pipeStatus, 0);
         //fprintf(stderr, "%s: Command not found.\n", args[0])
 }
-  fd = open("/dev/tty", O_WRONLY);
+  
+}
+else{
+fd = open("/dev/tty", O_WRONLY);
+}
 }
 
 void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, int numArgs){
