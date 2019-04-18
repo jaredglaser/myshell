@@ -112,23 +112,34 @@ int sh( int argc, char **argv, char **envp )
       (strcmp(args[0],"kill")==0) ||
       (strcmp(args[0],"printenv")==0) ||
       (strcmp(args[0],"setenv")==0) ){
-        printf("Executing built-in [%s]\n",args[0]);
+      printf("Executing built-in [%s]\n",args[0]);
+      if(strcmp(args[0],"exit")==0){
+        //free fields
+        free(copy);
+        free(prompt);
+        free(commandline);
+        free(owd);
+       
+        while(pathlist->next != NULL) {
+          struct pathelement* next = pathlist->next;
+          free(pathlist);
+          pathlist = next;
+        }
+        free(pathlist);
+
+        free(args);
+      
+        return 0;
+     }
+     else{
+        
+        builtIns(args,pathlist,prompt,commandline,owd,copy,envp);
+     }
       }
      /*  else  program to exec */
-     int wasBuilt=0;
-     if(wasBuilt = isBuiltin(args, pathlist,envp,copy,prompt,commandline,owd) == 2){
-       return(0);
-     }
-     else if(!wasBuilt){
-       if(strstr(args,"|")==0){
-          forkit(args, envp,pathlist,copy,i,0);
-       }
-       else if(strstr(args,"|&")==0){
-          forkit(args, envp,pathlist,copy,i,1);
-       }
-       else{
-        forkit(args, envp,pathlist,copy,i);
-       }
+     else{
+       forkit(args, envp,pathlist,copy,i);
+
     }
     free(copy);
   }
@@ -147,105 +158,6 @@ int sh( int argc, char **argv, char **envp )
   return 0;
 } /* sh() */
 
-int isBuiltin(char** args, struct pathelement* pathlist, char **envp, char* copy, char * prompt, char * commandline, char * owd){
-
-  if(strcmp(args[0],"where")==0){
-       if(args[1] != NULL)
-       for(int i = 0; i<MAXARGS; i ++){
-         if(args[i] != NULL)
-          where(args[i],pathlist);
-        else
-          break; 
-       }
-       else
-       printf("Where: not enough arguments\n");
-     }
-     else if(strcmp(args[0],"which")==0){
-       if(args[1] != NULL){
-       for(int i = 1; i<MAXARGS; i ++){
-         if(args[i] != NULL)
-          which(args[i],pathlist); 
-        else
-          break; 
-       }
-       }
-       else{
-         printf("Which: not enough arguments\n");
-       }
-     }
-       /* find it */
-       /* do fork(), execve() and waitpid() */
-     else if(strcmp(args[0],"pwd")==0){
-       if(args[1] != NULL)
-       printf("pwd: too many arguments \n");
-       else
-       printWorkingDir();
-     } 
-     else if(strcmp(args[0],"exit")==0){
-       //free fields
-       free(copy);
-       free(prompt);
-       free(commandline);
-       free(owd);
-       
-      while(pathlist->next != NULL) {
-        struct pathelement* next = pathlist->next;
-        free(pathlist);
-        pathlist = next;
-      }
-      free(pathlist);
-
-      free(args);
-      
-       return 2;
-     }
-    else if(strcmp(args[0],"cd")==0){
-      if(args[2] != NULL){
-        printf("cd: too many arguments\n");
-      }
-      else{
-       changeDir(args);
-      }
-    }
-     else if(strcmp(args[0],"list")==0){
-       list(args);
-     }
-     else if(strcmp(args[0],"watchmail")==0){
-        watchmail(args);
-     }
-     else if(strcmp(args[0],"watchuser")==0){
-        watchuser(args);
-     }
-     else if(strcmp(args[0],"pid")==0){
-       if(args[1] != NULL)
-       printf("pid: too many arguments\n");
-       else
-       printPid();
-     }
-     else if(strcmp(args[0],"prompt")==0){
-       promptCmd(args, prompt);
-     }
-     else if(strcmp(args[0], "kill")==0){
-       if(args[3]!=NULL)
-       printf("kill: too many arguments\n");
-       else
-       killProc(args);
-     }
-      else if(strcmp(args[0], "printenv")==0){
-       printenv(envp,args,0);
-     }
-      else if(strcmp(args[0], "setenv")==0){
-        if(args[3] != NULL){
-          printf("setenv: too many arguments\n");
-        }
-        else
-       setEnviornment(envp,args,pathlist);
-     }
-     else{
-       return 0;
-     }
-     return 1; //if one of these were called
-}
 
 void *which(char *command, struct pathelement *p)
 {
@@ -459,6 +371,7 @@ void setEnviornment(char **envp, char**args,struct pathelement *pathlist){
     printf("setenv: Too many arguments.\n");
   }
 }
+
 void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, int numArgs){
         
         int offset = 0;
@@ -493,6 +406,11 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
             offset = i; // file < command
             operator = 5; 
           }
+          if(strcmp(o_args[i], "|") ==0){
+            offset = i;
+            operator = 6;
+          }
+
         }
         char** newArgs;
         
@@ -555,84 +473,13 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
           printf("[%d] %s\n",i,argsPipe[i]);
         }
         }
-
+        
+        if(operator !=6){
         int PID = fork();
         int status;
         char * res;
         if(PID == 0){ //child
         if(strstr(args[0],"./") != NULL || strstr(args[0],"../") != NULL || args[0][0] == '/' || whichRet(args[0],pathlist)){
-          int offset = 0;
-  int operator = 0;
-  int leftside = 1;
-  int wasBackround = 0;
-  int pipefd[2];
-  int numArgsPipe = 0;
-  for(int i=0; i<numArgs; i++){ //look for a | or whatev
-    if(strcmp(o_args[i], "|") ==0){
-            offset = i;
-            operator = 6;
-    }
-  }
-
-  if(operator == 6){ //command flag | command flag
-    numArgsPipe = numArgs - offset - 1;
-    numArgs = offset;
-    offset = 0;
-  }
-
-  char **args = calloc(MAXARGS, sizeof(char*));
-  char **argsPipe = calloc(MAXARGS, sizeof(char*));
-        
-  
-    int j = 0;
-    for(int i=offset;i<numArgs+offset;i++){
-      args[j] = o_args[i];
-      j++;
-    }
-  
- 
-    for(int i =0; i<numArgsPipe; i++){
-      argsPipe[i] = o_args[numArgs+1+i];
-      }
-    
-
-
-    //TESTING
-    for(int i=0;i<numArgs;i++){
-      printf("[%d] %s\n",i,args[i]);
-    }
-
-    
-    for(int i=0;i<numArgs;i++){
-      printf("[%d] %s\n",i,argsPipe[i]);
-      }
-    
-
-    if(!fork()){
-      int pipeStatus;
-            int pfds[2];
-    pipe(pfds);
-    pid_t first = fork();
-    if (first) {
-        close(1);       /* close normal stdout */
-        dup(pfds[1]);   /* make stdout same as pfds[1] */
-        close(pfds[0]); /* we don't need this */
-      execve(args[0],args,envp);
-      close(pfds[1]);
-    } else {
-        close(0);       /* close normal stdin */
-        dup(pfds[0]);   /* make stdin same as pfds[0] */
-        close(pfds[1]); /* we don't need this */
-        execve(argsPipe[0], argsPipe, envp);
-        waitpid(first, &pipeStatus, 0);
-            //fprintf(stderr, "%s: Command not found.\n", args[0])
-    }
-      
-    }
-    else{
-    fd = open("/dev/tty", O_WRONLY);
-    }
-          
           int fd;
           if(operator == 1){
             //handle case with >
@@ -836,9 +683,42 @@ void forkit(char**o_args, char **envp,struct pathelement *pathlist,char*copy, in
               fd = open("/dev/tty", O_WRONLY);
             }
 
-          
+        }
           
         }
+        else{ //pipe implementation
+          pid_t pid = fork();
+          if(pid > 0){ //parent
+            int status;
+            waitpid(pid, &status, 0);
+          }
+          else{//child
+             int pipeStatus;
+              int pfds[2];
+              pipe(pfds);
+              pid_t first = fork();
+              // first process / parent
+              if (first) {
+                /* char* c = which(com, pathlist); */
+                close(1);
+                dup(pfds[1]);
+                close(pfds[0]);
+                if (-1 == execve(whichRet(args[0],pathlist), args, envp)) {
+                  perror(args[0]);
+                }
+                close(pfds[1]);
+              }
+              else {
+                close(0);
+                dup(pfds[0]);
+                close(pfds[1]);
+                execve(whichRet(argsPipe[0],pathlist), argsPipe, envp);
+                waitpid(first, &pipeStatus, 0);
+              }
+            }
+          }
+
+        
 
         //fprintf(stderr, "%s: Command not found.\n", args[0]);
 }
@@ -953,20 +833,22 @@ void watchuser(char **args){
   }
   else if(args[2]){ //"off" implementation
     nodeu *tmp = headu;
-    nodeu *tmp2 = headu;
+    nodeu *prev = headu;
     if(!strcmp(args[1], tmp->data)){
       headu = tmp->next;
+      printf("Freeing username IN HEAD:  %s\n", tmp->data);
       free(tmp->data);
       free(tmp);
     }
     else{
-      while(tmp2 = tmp->next){
-        if(!strcmp(tmp2->data, args[1])){
-          tmp->next = tmp2->next;
-          free(tmp2->data);
-          free(tmp2);
-        }
+      while(tmp!=NULL && strcmp(tmp->data, args[1])){
+          prev = tmp;
+          tmp = tmp->next;        
       }
+          prev->next = tmp->next;
+          printf("freeing %s\n", tmp->data);
+          free(tmp->data);
+          free(tmp);
     }
   }
 }
@@ -1026,4 +908,81 @@ void *watchuserthread(char **args){
   }
   sleep(3);
 }
+}
+
+void builtIns(char**args, struct pathelement* pathlist,char*prompt,char*commandline,char*owd,char*copy, char**envp){
+  if(strcmp(args[0],"where")==0){
+       if(args[1] != NULL)
+       for(int i = 0; i<MAXARGS; i ++){
+         if(args[i] != NULL)
+          where(args[i],pathlist);
+        else
+          break; 
+       }
+       else
+       printf("Where: not enough arguments\n");
+     }
+     else if(strcmp(args[0],"which")==0){
+       if(args[1] != NULL){
+       for(int i = 1; i<MAXARGS; i ++){
+         if(args[i] != NULL)
+          which(args[i],pathlist); 
+        else
+          break; 
+       }
+       }
+       else{
+         printf("Which: not enough arguments\n");
+       }
+     }
+       /* find it */
+       /* do fork(), execve() and waitpid() */
+     else if(strcmp(args[0],"pwd")==0){
+       if(args[1] != NULL)
+       printf("pwd: too many arguments \n");
+       else
+       printWorkingDir();
+     } 
+    else if(strcmp(args[0],"cd")==0){
+      if(args[2] != NULL){
+        printf("cd: too many arguments\n");
+      }
+      else{
+       changeDir(args);
+      }
+    }
+     else if(strcmp(args[0],"list")==0){
+       list(args);
+     }
+     else if(strcmp(args[0],"watchmail")==0){
+        watchmail(args);
+     }
+     else if(strcmp(args[0],"watchuser")==0){
+        watchuser(args);
+     }
+     else if(strcmp(args[0],"pid")==0){
+       if(args[1] != NULL)
+       printf("pid: too many arguments\n");
+       else
+       printPid();
+     }
+     else if(strcmp(args[0],"prompt")==0){
+       promptCmd(args, prompt);
+     }
+     else if(strcmp(args[0], "kill")==0){
+       if(args[3]!=NULL)
+       printf("kill: too many arguments\n");
+       else
+       killProc(args);
+     }
+      else if(strcmp(args[0], "printenv")==0){
+       printenv(envp,args,0);
+     }
+      else if(strcmp(args[0], "setenv")==0){
+        if(args[3] != NULL){
+          printf("setenv: too many arguments\n");
+        }
+        else
+       setEnviornment(envp,args,pathlist);
+     }
 }

@@ -33,9 +33,7 @@ void addnode(pthread_t thread, char *data);
 void addnodeu(int thread, char *data);
 void watchuser(char **args);
 void *watchuserthread(char **args);
-void forkitPipe(char**o_args, char **envp,struct pathelement *pathlist,char*copy, int numArgs, int type);
-int isBuiltin(char** args, struct pathelement* pathlist, char **envp, char* copy, char * prompt, char * commandline, char * owd);
-
+void builtIns(char**args, struct pathelement* pathlist,char*prompt,char*commandline,char*owd,char*copy, char**envp);
 
 #define PROMPTMAX 32
 #define MAXARGS 10
