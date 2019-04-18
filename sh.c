@@ -64,10 +64,7 @@ int sh( int argc, char **argv, char **envp )
         zombieIDs[i] = NULL;
       } 
       }
-
     }
-
-
     /* print your prompt */
     //generate directory
     char *workingdir;
@@ -733,6 +730,7 @@ void addnode(pthread_t thread, char *data) {
     node *tmp = malloc(sizeof(node));
     tmp->thread = thread;
     tmp->data = malloc(sizeof(data+1));
+    tmp->sb1 = malloc(sizeof(struct stat));
     strcpy(tmp->data,data);
     node *headref = head;
     tmp->next = NULL;
@@ -794,28 +792,34 @@ void watchmail(char **args){
   }
 }
 void *watchmailthread(char **args){
-  struct stat sb;
-  struct stat sb1;
-  if(stat(args[1], &sb)){
-    printf("Error getting file information\n");
-  }
-  int size = sb.st_size;
-  while(1){ //A sleep for 1 second should be in the loop
-    sleep(1);
-    if(!stat(args[1], &sb1)){
-      if(sb1.st_size != size){
-        struct timeval tv;
-        time_t timenow;
-        struct tm *nowtm;
-        char tmbuf[64], buf[64];
-        gettimeofday(&tv, NULL);
-        timenow = tv.tv_sec;
-        nowtm = localtime(&timenow);
-        strftime(tmbuf, sizeof(tmbuf), "%Y-%m-%d %H:%M:%S", nowtm);
-        printf("\a\n BEEP You've Got Mail in %s at %s \n", args[1], tmbuf);
-        size = sb1.st_size;
-      }
+  node *tmp = head;
+  while(tmp){
+    if(stat(tmp->data, tmp->sb1)){
+      printf("Error getting file information\n");
     }
+    tmp = tmp->next;
+  }
+  while(1){ //A sleep for 1 second should be in the loop
+    node *tmp = head;
+    while(tmp){
+      int newsize = tmp->sb1->st_size;
+      if(!stat(tmp->data, tmp->sb1)){ //get the stat of the node into its sb1
+        if(tmp->sb1->st_size != newsize){ //if the file changed...
+          struct timeval tv;
+          time_t timenow;
+          struct tm *nowtm;
+          char tmbuf[64], buf[64];
+          gettimeofday(&tv, NULL);
+          timenow = tv.tv_sec;
+          nowtm = localtime(&timenow);
+          strftime(tmbuf, sizeof(tmbuf), "%Y-%m-%d %H:%M:%S", nowtm);
+          printf("\a\n BEEP You've Got Mail in %s at %s \n", tmp->data, tmbuf);
+          newsize = tmp->sb1->st_size; //update with new size
+        }
+      }
+    tmp = tmp->next;
+    }
+  sleep(1);
   }
 }
 void watchuser(char **args){

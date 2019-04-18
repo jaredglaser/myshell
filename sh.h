@@ -3,6 +3,7 @@
 typedef struct node
 { 
     pthread_t thread;
+    struct stat *sb1;
     char *data; 
     struct node *next; 
 }node;
